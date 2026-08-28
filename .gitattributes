@@ -1,0 +1,25 @@
+# Normalise line endings.
+#
+# Without this, a Windows checkout rewrites every file to CRLF and a Linux CI run then sees the
+# whole repository as modified — which breaks the "permission matrix is current" check and makes
+# every diff unreadable. Text files are stored LF in the repository and checked out LF
+# everywhere; the few files that genuinely require CRLF are marked explicitly.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.ico binary
+
+# Generated. Collapsed in diffs and excluded from language statistics.
+pnpm-lock.yaml -diff linguist-generated
+packages/db/drizzle/_kit/** linguist-generated
+docs/05_RBAC_PERMISSION_MATRIX.md linguist-generated
+
+# Migrations are reviewed by humans before they touch a school's ledger; never collapse them.
+packages/db/migrations/*.sql diff
