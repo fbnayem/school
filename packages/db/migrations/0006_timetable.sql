@@ -325,7 +325,7 @@ begin
   select string_agg(t.name, ', ' order by t.name)
   into offending
   from (values ('timetables'), ('timetable_entries'), ('timetable_substitutions')) as t(name)
-  join pg_class c on c.relname = t.name
+  join pg_class c on c.relname::text = t.name
   join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
   where not (c.relrowsecurity and c.relforcerowsecurity);
 
@@ -340,7 +340,7 @@ begin
     select 1
     from pg_class c
     join pg_namespace n on n.oid = c.relnamespace and n.nspname = 'public'
-    where c.relname = t.name
+    where c.relname::text = t.name
       -- Listed one at a time: `has_table_privilege` with a comma-separated list returns true
       -- when *any* of them is held, which would pass on read-only access.
       and has_table_privilege('shikkha_app', c.oid, 'SELECT')

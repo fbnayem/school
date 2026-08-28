@@ -3,3 +3,7 @@ export * from './auth';
 export * from './academic';
 export * from './students';
 export * from './guardians';
+export * from './timetable';
+export * from './attendance';
+export * from './exams';
+export * from './fees';

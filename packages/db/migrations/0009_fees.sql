@@ -421,11 +421,13 @@ create index if not exists student_fee_assignments_student_idx
 create index if not exists student_fee_assignments_structure_idx
   on public.student_fee_assignments using btree (fee_structure_id);
 
--- Postgres treats NULLs as distinct, so this does not stop two "all heads" concessions
--- starting on the same day. The service refuses that case explicitly; the index covers the
--- per-head case, which is the one a double-click produces.
+-- `type` is part of the key because a student may legitimately hold a percentage scholarship
+-- and a fixed sibling discount on the same head from the same date. Postgres treats NULLs as
+-- distinct, so this does not stop two "all heads" concessions starting on the same day; the
+-- service refuses that case explicitly. The index covers the per-head case, which is the one a
+-- double-click produces.
 create unique index if not exists fee_concessions_student_head_key
-  on public.fee_concessions using btree (student_id, fee_head_id, valid_from)
+  on public.fee_concessions using btree (student_id, fee_head_id, type, valid_from)
   where status <> 'rejected' and archived_at is null;
 create index if not exists fee_concessions_tenant_idx
   on public.fee_concessions using btree (tenant_id);

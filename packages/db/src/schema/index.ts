@@ -14,3 +14,7 @@ export * from './files';
 export * from './academic';
 export * from './people';
 export * from './students';
+export * from './timetable';
+export * from './attendance';
+export * from './exams';
+export * from './fees';

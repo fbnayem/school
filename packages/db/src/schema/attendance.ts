@@ -163,10 +163,7 @@ export const attendanceSessions = pgTable(
     index('attendance_sessions_tenant_idx').on(table.tenantId),
     // The hot path: "what registers exist for this section this month".
     index('attendance_sessions_section_date_idx').on(table.sectionId, table.attendanceDate),
-    index('attendance_sessions_institution_date_idx').on(
-      table.institutionId,
-      table.attendanceDate,
-    ),
+    index('attendance_sessions_institution_date_idx').on(table.institutionId, table.attendanceDate),
     index('attendance_sessions_year_idx').on(table.academicYearId),
     index('attendance_sessions_campus_idx').on(table.campusId),
     index('attendance_sessions_period_idx').on(table.periodId),

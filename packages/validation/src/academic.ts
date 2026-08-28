@@ -307,10 +307,10 @@ export const updateShiftSchema = z
     version: z.number().int().min(1),
   })
   .refine((data) => Object.keys(data).length > 1, { message: 'No changes were submitted' })
-  .refine(
-    (data) => !(data.startTime && data.endTime) || data.endTime > data.startTime,
-    { message: 'The shift must end after it starts', path: ['endTime'] },
-  );
+  .refine((data) => !(data.startTime && data.endTime) || data.endTime > data.startTime, {
+    message: 'The shift must end after it starts',
+    path: ['endTime'],
+  });
 
 export const listShiftsSchema = z.object({
   campusId: uuidSchema.optional(),

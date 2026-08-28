@@ -33,6 +33,10 @@ import { StorageModule } from './modules/storage/storage.module';
 import { StudentsModule } from './modules/students/students.module';
 import { AcademicModule } from './modules/academic/academic.module';
 import { GuardiansModule } from './modules/guardians/guardians.module';
+import { TimetableModule } from './modules/timetable/timetable.module';
+import { AttendanceModule } from './modules/attendance/attendance.module';
+import { ExamsModule } from './modules/exams/exams.module';
+import { FeesModule } from './modules/fees/fees.module';
 
 @Module({
   imports: [
@@ -70,6 +74,10 @@ import { GuardiansModule } from './modules/guardians/guardians.module';
     AcademicModule,
     StudentsModule,
     GuardiansModule,
+    TimetableModule,
+    AttendanceModule,
+    ExamsModule,
+    FeesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

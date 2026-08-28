@@ -388,11 +388,13 @@ export const feeConcessions = pgTable(
     ...actorColumns(),
   },
   (table) => [
-    // One live concession per student, head and start date. Postgres treats NULLs as
-    // distinct, so several "all heads" concessions starting on the same day are still
-    // possible; the service refuses those explicitly, since the index cannot.
+    // One live concession per student, head, kind and start date. A student may legitimately
+    // hold a percentage scholarship *and* a fixed sibling discount on the same head, which is
+    // why `type` is part of the key. Postgres treats NULLs as distinct, so several "all heads"
+    // concessions starting on the same day are still possible; the service refuses those
+    // explicitly, since the index cannot.
     uniqueIndex('fee_concessions_student_head_key')
-      .on(table.studentId, table.feeHeadId, table.validFrom)
+      .on(table.studentId, table.feeHeadId, table.type, table.validFrom)
       .where(sql`${table.status} <> 'rejected' AND ${table.archivedAt} IS NULL`),
     index('fee_concessions_tenant_idx').on(table.tenantId),
     index('fee_concessions_student_idx').on(table.studentId, table.status),
@@ -449,9 +451,7 @@ export const invoices = pgTable(
     dueDate: date('due_date').notNull(),
 
     subtotal: numeric('subtotal', { precision: 14, scale: 2 }).notNull().default('0.00'),
-    discountTotal: numeric('discount_total', { precision: 14, scale: 2 })
-      .notNull()
-      .default('0.00'),
+    discountTotal: numeric('discount_total', { precision: 14, scale: 2 }).notNull().default('0.00'),
     fineTotal: numeric('fine_total', { precision: 14, scale: 2 }).notNull().default('0.00'),
     total: numeric('total', { precision: 14, scale: 2 }).notNull().default('0.00'),
     paidTotal: numeric('paid_total', { precision: 14, scale: 2 }).notNull().default('0.00'),

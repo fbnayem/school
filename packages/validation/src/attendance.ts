@@ -54,11 +54,7 @@ export const EMPLOYEE_ATTENDANCE_STATUSES = [
 
 export const EMPLOYEE_ATTENDANCE_SOURCES = ['manual', 'device'] as const;
 
-export const ATTENDANCE_SESSION_SORT_FIELDS = [
-  'attendanceDate',
-  'status',
-  'createdAt',
-] as const;
+export const ATTENDANCE_SESSION_SORT_FIELDS = ['attendanceDate', 'status', 'createdAt'] as const;
 
 export const ATTENDANCE_CORRECTION_SORT_FIELDS = ['requestedAt', 'status', 'createdAt'] as const;
 
