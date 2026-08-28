@@ -1,0 +1,187 @@
+name: CI
+
+# Quality gates. The build fails on lint, type errors, unit failures, integration failures,
+# security-suite failures, build failures, and migration failures — in that order of cost, so a
+# typo is caught in 30 seconds rather than after a five-minute database spin-up.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.15.0'
+
+jobs:
+  # Fast feedback: no containers, no database. Catches most mistakes in well under a minute.
+  static:
+    name: Types and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Packages must be built before dependents can typecheck against them.
+      - name: Build workspace packages
+        run: pnpm --filter "./packages/*" run build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      # The permission matrix is generated from code. If it is out of date, the document that
+      # auditors rely on is lying about who can do what.
+      - name: Permission matrix is current
+        run: |
+          pnpm docs:rbac
+          if ! git diff --quiet docs/05_RBAC_PERMISSION_MATRIX.md; then
+            echo "::error::docs/05_RBAC_PERMISSION_MATRIX.md is out of date. Run 'pnpm docs:rbac' and commit the result."
+            git diff docs/05_RBAC_PERMISSION_MATRIX.md
+            exit 1
+          fi
+
+  database:
+    name: Migrations, integration and security tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Same image as development, so a migration that works locally works here.
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: shikkha_migrator
+          POSTGRES_PASSWORD: shikkha_dev_password
+          POSTGRES_DB: shikkha_dev
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U shikkha_migrator -d shikkha_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6380:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      MIGRATION_DATABASE_URL: postgres://shikkha_migrator:shikkha_dev_password@localhost:5433/shikkha_dev
+      DATABASE_URL: postgres://shikkha_app:shikkha_dev_password@localhost:5433/shikkha_dev
+      REDIS_URL: redis://localhost:6380
+      TEST_DB_PORT: '5433'
+      TEST_DB_PASSWORD: shikkha_dev_password
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter "./packages/*" run build
+
+      # The service container's init scripts do not run, so the application role is created
+      # here. It must not be the owner and must not have BYPASSRLS — migration 0002 asserts both.
+      - name: Create application database roles
+        run: |
+          PGPASSWORD=shikkha_dev_password psql -h localhost -p 5433 -U shikkha_migrator -d shikkha_dev <<'SQL'
+          create role shikkha_app with login password 'shikkha_dev_password' nobypassrls;
+          create role shikkha_readonly with login password 'shikkha_dev_password' nobypassrls;
+          grant connect on database shikkha_dev to shikkha_app, shikkha_readonly;
+          create database shikkha_test owner shikkha_migrator;
+          grant connect on database shikkha_test to shikkha_app, shikkha_readonly;
+          SQL
+
+      - name: Apply migrations
+        run: pnpm db:migrate
+
+      # Applying twice must be a no-op. A migration that is not idempotent breaks every
+      # deployment that retries.
+      - name: Migrations are idempotent
+        run: |
+          output=$(pnpm db:migrate)
+          echo "$output"
+          echo "$output" | grep -q "Nothing to apply" || {
+            echo "::error::Re-running migrations was not a no-op."
+            exit 1
+          }
+
+      - name: Seed data loads cleanly
+        run: pnpm db:seed -- --fresh
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+      # Release-blocking. A failure here is a data breach, not a bug.
+      - name: Security tests — tenant isolation and RBAC
+        run: pnpm test:security
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    # Advisory: a new advisory against a transitive dependency should not block an unrelated
+    # bug fix, but it must be visible.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high

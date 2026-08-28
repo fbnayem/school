@@ -1,0 +1,47 @@
+{
+  "name": "shikkha-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-native multi-tenant School Management System for Bangladesh",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "eslint .",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration",
+    "test:security": "turbo run test:security",
+    "test:e2e": "turbo run test:e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yaml,yml}\"",
+    "db:generate": "pnpm --filter @shikkha/db run generate",
+    "db:migrate": "pnpm --filter @shikkha/db run migrate",
+    "db:seed": "pnpm --filter @shikkha/db run seed",
+    "db:reset": "pnpm --filter @shikkha/db run reset",
+    "db:studio": "pnpm --filter @shikkha/db run studio",
+    "infra:up": "docker compose -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infra/docker-compose.yml down",
+    "clean": "turbo run clean && rimraf node_modules",
+    "docs:rbac": "pnpm --filter @shikkha/permissions run build && tsx scripts/generate-rbac-matrix.ts",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@shikkha/permissions": "workspace:*",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0",
+    "prettier": "^3.4.2",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.68.0"
+  }
+}

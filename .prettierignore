@@ -1,0 +1,10 @@
+node_modules
+dist
+.next
+coverage
+.turbo
+pnpm-lock.yaml
+packages/db/drizzle
+packages/db/migrations
+docs/05_RBAC_PERMISSION_MATRIX.md
+apps/web/next-env.d.ts

@@ -1,0 +1,41 @@
+{
+  "name": "@shikkha/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "drizzle"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "clean": "rimraf dist .turbo *.tsbuildinfo",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate": "tsx src/cli/migrate.ts",
+    "seed": "tsx src/cli/seed.ts",
+    "reset": "tsx src/cli/reset.ts",
+    "studio": "drizzle-kit studio",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "promote": "tsx scripts/promote-migration.ts",
+    "migrate:status": "tsx src/cli/migrate.ts --status"
+  },
+  "dependencies": {
+    "@shikkha/permissions": "workspace:*",
+    "@shikkha/shared": "workspace:*",
+    "argon2": "^0.41.1",
+    "drizzle-orm": "^0.38.3",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.30.1",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

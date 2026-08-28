@@ -1,0 +1,88 @@
+# Development infrastructure.
+#
+# Production does not use this file — see docs/11_DEPLOYMENT.md. Credentials here are
+# deliberately well-known development values and must never appear in a deployed environment;
+# `apps/api` refuses to start with them when NODE_ENV=production.
+
+name: shikkha
+
+services:
+  postgres:
+    # pgvector is needed from Phase 29 (RAG). Including it now avoids a base-image swap later,
+    # which would mean a full data reload on every developer's machine.
+    image: pgvector/pgvector:pg17
+    container_name: shikkha-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shikkha_migrator
+      POSTGRES_PASSWORD: shikkha_dev_password
+      POSTGRES_DB: shikkha_dev
+      # C collation with UTF-8 encoding: deterministic sort order across platforms, which
+      # matters because index ordering must not differ between a developer's machine and the
+      # server. Bangla collation is handled in queries, not by the database default.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U shikkha_migrator -d shikkha_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: shikkha-redis
+    restart: unless-stopped
+    # appendonly keeps queued jobs across a restart; losing an unsent SMS queue on a laptop
+    # reboot makes background-job behaviour hard to reason about during development.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '6380:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # S3-compatible object storage, so the S3 adapter is exercised in development rather than
+  # only the local-filesystem one. Optional: STORAGE_DRIVER=local skips it entirely.
+  minio:
+    image: minio/minio:latest
+    container_name: shikkha-minio
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: shikkha_dev
+      MINIO_ROOT_PASSWORD: shikkha_dev_password
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Catches outbound mail in development. Nothing reaches a real inbox from a dev machine.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: shikkha-mailpit
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # Web UI
+    environment:
+      MP_MAX_MESSAGES: 500
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

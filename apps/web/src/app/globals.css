@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Colour tokens as raw RGB channels, so Tailwind's `<alpha-value>` syntax works and every
+ * colour can be used at any opacity without defining a second token.
+ *
+ * Dark mode is defined here in full rather than sprinkled through components as `dark:`
+ * variants — that way a component author never has to think about it, and there is one place
+ * to check when a surface looks wrong.
+ */
+:root {
+  --surface: 255 255 255;
+  --surface-muted: 248 250 252;
+  --surface-raised: 255 255 255;
+  --content: 15 23 42;
+  --content-muted: 71 85 105;
+  --content-subtle: 148 163 184;
+  --content-inverted: 255 255 255;
+  --line: 226 232 240;
+  --line-strong: 203 213 225;
+}
+
+.dark {
+  --surface: 15 23 42;
+  --surface-muted: 2 6 23;
+  --surface-raised: 30 41 59;
+  --content: 248 250 252;
+  --content-muted: 148 163 184;
+  --content-subtle: 100 116 139;
+  --content-inverted: 15 23 42;
+  --line: 51 65 85;
+  --line-strong: 71 85 105;
+}
+
+@layer base {
+  html {
+    /* Fractional font sizes elsewhere in the scale need this to land on whole pixels. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-surface-muted text-content antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /*
+   * A visible focus ring on keyboard navigation only.
+   *
+   * `:focus-visible` rather than `:focus` so clicking a button does not leave a ring behind,
+   * which is the reason people disable focus styles altogether and break keyboard access.
+   */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent-500 ring-offset-2 ring-offset-surface;
+  }
+
+  /* Bengali text needs slightly more line height than Latin at the same size. */
+  :lang(bn) {
+    line-height: 1.7;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-md border border-line bg-surface-raised shadow-card;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-content-muted;
+  }
+
+  .input {
+    @apply w-full rounded border border-line bg-surface px-3 py-2 text-base text-content
+           placeholder:text-content-subtle
+           focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500
+           disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-content-subtle;
+  }
+
+  .input-error {
+    @apply border-danger focus:border-danger focus:ring-danger;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded px-3.5 py-2 text-base
+           font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent-600 text-white hover:bg-accent-700 active:bg-accent-800;
+  }
+
+  .btn-secondary {
+    @apply btn border border-line bg-surface text-content hover:bg-surface-muted;
+  }
+
+  .btn-ghost {
+    @apply btn text-content-muted hover:bg-surface-muted hover:text-content;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs font-medium;
+  }
+}
+
+/*
+ * Screen-reader-only, for labels that must exist for assistive technology but would be
+ * redundant visually — table sort controls, icon-only buttons.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

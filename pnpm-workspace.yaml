@@ -1,0 +1,11 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm 10 blocks postinstall scripts by default. Only these are approved:
+#  - argon2 and bcrypt-style natives need to compile a binding to work at all
+#  - esbuild is vitest's bundler and downloads its platform binary on install
+# @scarf/scarf is deliberately absent: it is analytics, not functionality.
+onlyBuiltDependencies:
+  - argon2
+  - esbuild
