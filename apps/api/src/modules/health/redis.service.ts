@@ -14,7 +14,8 @@ import { env } from '../../config/env';
 import { getLogger } from '../../common/logger';
 
 export interface RedisHealth {
-  healthy: boolean;
+  /** 'up' — reachable. 'connecting' — transiently unavailable. 'down' — genuinely unreachable. */
+  state: 'up' | 'connecting' | 'down';
   latencyMs: number;
 }
 
@@ -49,13 +50,28 @@ export class RedisService implements OnModuleDestroy {
     return this.client;
   }
 
+  /**
+   * Health probe.
+   *
+   * Distinguishes "reconnecting" from "down", which matters because `enableOfflineQueue: false`
+   * makes a command issued during a reconnect fail *immediately* rather than waiting. That is
+   * the behaviour we want for application caching — fail fast and fall back to the source of
+   * truth — but reported bluntly as "down" it flaps the readiness probe every time the
+   * connection blips, pulling healthy instances out of the load balancer for no reason.
+   *
+   * ioredis exposes its connection state, so a failure while connecting is reported as
+   * transient and a failure while nominally ready is reported as down.
+   */
   async ping(): Promise<RedisHealth> {
     const startedAt = Date.now();
+    const status = this.redis.status;
     try {
       await this.redis.ping();
-      return { healthy: true, latencyMs: Date.now() - startedAt };
+      return { state: 'up', latencyMs: Date.now() - startedAt };
     } catch {
-      return { healthy: false, latencyMs: Date.now() - startedAt };
+      const transient =
+        status === 'connecting' || status === 'reconnecting' || status === 'connect';
+      return { state: transient ? 'connecting' : 'down', latencyMs: Date.now() - startedAt };
     }
   }
 

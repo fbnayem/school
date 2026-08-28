@@ -104,9 +104,13 @@ export class HealthController {
 
   private async checkRedis(): Promise<ComponentStatus> {
     const result = await this.redis.ping();
-    return result.healthy
-      ? { status: 'up', latencyMs: result.latencyMs }
-      : { status: 'down', latencyMs: result.latencyMs };
+    if (result.state === 'up') return { status: 'up', latencyMs: result.latencyMs };
+    // Reconnecting is degraded, not down: the cache is unavailable but every read falls back
+    // to the database, so the instance can still serve traffic correctly.
+    if (result.state === 'connecting') {
+      return { status: 'degraded', latencyMs: result.latencyMs, detail: 'reconnecting' };
+    }
+    return { status: 'down', latencyMs: result.latencyMs };
   }
 
   private async checkStorage(): Promise<ComponentStatus> {
