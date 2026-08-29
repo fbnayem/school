@@ -46,6 +46,8 @@ import { DisciplineModule } from './modules/discipline/discipline.module';
 import { PaymentGatewayModule } from './modules/payment-gateway/payment-gateway.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { LibraryModule } from './modules/library/library.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
+import { TransportModule } from './modules/transport/transport.module';
 
 @Module({
   imports: [
@@ -96,6 +98,8 @@ import { LibraryModule } from './modules/library/library.module';
     PaymentGatewayModule,
     AccountingModule,
     LibraryModule,
+    PayrollModule,
+    TransportModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

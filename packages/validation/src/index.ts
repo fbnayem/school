@@ -15,3 +15,8 @@ export * from './discipline';
 export * from './payment-gateway';
 export * from './accounting';
 export * from './library';
+export * from './lms';
+export * from './communication';
+export * from './payroll';
+export * from './transport';
+export * from './inventory';
