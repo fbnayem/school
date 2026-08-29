@@ -272,7 +272,7 @@ export class AutomationController {
    */
   @Post('events')
   @InstitutionScoped()
-  @RequirePermissions('automation.rules.manage')
+  @RequirePermissions('automation.events.emit')
   @Audited({ module: 'automation', resourceType: 'automation_event', action: 'create' })
   @ApiOperation({ summary: 'Emit an automation event (idempotent on dedupeKey)' })
   async emitEvent(
@@ -289,7 +289,7 @@ export class AutomationController {
    */
   @Post('events/process')
   @InstitutionScoped()
-  @RequirePermissions('automation.rules.manage')
+  @RequirePermissions('automation.events.process')
   @Audited({ module: 'automation', resourceType: 'automation_event', action: 'update' })
   @ApiOperation({ summary: 'Process pending automation events (no background worker exists)' })
   async processEvents(
@@ -327,7 +327,7 @@ export class AutomationController {
 
   @Get('executions')
   @InstitutionScoped()
-  @RequirePermissions('automation.rules.view')
+  @RequirePermissions('automation.executions.view')
   @ApiOperation({ summary: 'Execution history — acted, suppressed, awaiting and failed alike' })
   async listExecutions(
     @CurrentUser() principal: Principal,
@@ -344,7 +344,7 @@ export class AutomationController {
 
   @Get('suggestions')
   @InstitutionScoped()
-  @RequirePermissions('automation.rules.view')
+  @RequirePermissions('automation.executions.view')
   @ApiOperation({ summary: 'Suggestions raised by rules, awaiting a human decision' })
   async listSuggestions(
     @CurrentUser() principal: Principal,
@@ -362,7 +362,7 @@ export class AutomationController {
   /** Records that a person agreed. It does not carry out the suggestion — a person does. */
   @Post('suggestions/:id/accept')
   @InstitutionScoped()
-  @RequirePermissions('automation.rules.manage')
+  @RequirePermissions('automation.suggestions.decide')
   @Audited({
     module: 'automation',
     resourceType: 'automation_suggestion',
@@ -388,7 +388,7 @@ export class AutomationController {
 
   @Post('suggestions/:id/dismiss')
   @InstitutionScoped()
-  @RequirePermissions('automation.rules.manage')
+  @RequirePermissions('automation.suggestions.decide')
   @Audited({
     module: 'automation',
     resourceType: 'automation_suggestion',
@@ -414,7 +414,7 @@ export class AutomationController {
 
   @Get('reports/activity')
   @InstitutionScoped()
-  @RequirePermissions('automation.rules.view')
+  @RequirePermissions('automation.executions.view')
   @ApiOperation({ summary: 'What the automation engine did, by status and by rule' })
   async activityReport(
     @CurrentUser() principal: Principal,

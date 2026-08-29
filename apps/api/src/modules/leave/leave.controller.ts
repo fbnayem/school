@@ -192,7 +192,7 @@ export class LeaveController {
    * writes the audit record inside the adjusting transaction, hence `recordedBy: 'service'`.
    */
   @Post('balances/adjust')
-  @RequirePermissions('leave.policies.manage')
+  @RequirePermissions('leave.balances.adjust')
   @Audited({
     module: 'leave',
     resourceType: 'leave_balance',
@@ -266,7 +266,7 @@ export class LeaveController {
   }
 
   @Get('reports/liability')
-  @RequirePermissions('leave.requests.view.all')
+  @RequirePermissions('leave.reports.view')
   @ApiOperation({ summary: 'Unused entitlement and what it would cost to pay out' })
   async liability(
     @Query(zodQuery(leaveLiabilityQuerySchema)) query: z.infer<typeof leaveLiabilityQuerySchema>,
@@ -484,7 +484,7 @@ export class LeaveController {
   }
 
   @Post('encashments')
-  @RequirePermissions('leave.requests.create')
+  @RequirePermissions('leave.encashment.request')
   @Audited({
     module: 'leave',
     resourceType: 'leave_encashment',
@@ -506,7 +506,7 @@ export class LeaveController {
    * transaction carries the actual decision and the balance movement.
    */
   @Post('encashments/:id/decision')
-  @RequirePermissions('leave.requests.approve')
+  @RequirePermissions('leave.encashment.approve')
   @Audited({
     module: 'leave',
     resourceType: 'leave_encashment',
@@ -539,7 +539,7 @@ export class LeaveController {
   // maintains the calendar it makes up for.
 
   @Get('holiday-overrides')
-  @RequirePermissions('academic.calendar.view', 'academic.calendar.manage', { mode: 'any' })
+  @RequirePermissions('leave.holidays.view', 'leave.holidays.manage', { mode: 'any' })
   @ApiOperation({ summary: 'List the institution’s working-day exceptions' })
   async listHolidayOverrides(
     @Query(zodQuery(listHolidayOverridesSchema))
@@ -553,7 +553,7 @@ export class LeaveController {
   }
 
   @Post('holiday-overrides')
-  @RequirePermissions('academic.calendar.manage')
+  @RequirePermissions('leave.holidays.manage')
   @Audited({
     module: 'leave',
     resourceType: 'holiday_override',
@@ -570,7 +570,7 @@ export class LeaveController {
   }
 
   @Patch('holiday-overrides/:id')
-  @RequirePermissions('academic.calendar.manage')
+  @RequirePermissions('leave.holidays.manage')
   @Audited({
     module: 'leave',
     resourceType: 'holiday_override',
@@ -594,7 +594,7 @@ export class LeaveController {
   }
 
   @Post('holiday-overrides/:id/archive')
-  @RequirePermissions('academic.calendar.manage')
+  @RequirePermissions('leave.holidays.manage')
   @Audited({
     module: 'leave',
     resourceType: 'holiday_override',

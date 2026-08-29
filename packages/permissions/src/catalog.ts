@@ -245,6 +245,25 @@ export const PERMISSION_CATALOG = {
     'leave.requests.create',
     'leave.requests.approve',
     'leave.policies.manage',
+    // Adjusting an entitlement is a policy act, not an approval one: it changes how much
+    // leave someone has rather than deciding one application. It rode on
+    // `leave.policies.manage`, which conflated "may design the leave scheme" with "may hand
+    // this employee four more days".
+    'leave.balances.adjust',
+    // Encashment turns leave into money, so it gets the same two-person split as everything
+    // else that does. These rode on `leave.requests.{create,approve}`, which meant anyone who
+    // could approve a day off could approve a payment.
+    'leave.encashment.request',
+    'leave.encashment.approve',
+    // The liability report values outstanding leave against salary. It rode on
+    // `leave.requests.view.all`, so seeing the team's leave calendar carried seeing what the
+    // institution owes in taka.
+    'leave.reports.view',
+    // A holiday override is a leave fact as much as a calendar one. It rode on
+    // `academic.calendar.*`, which gave the academic office authority over payroll-affecting
+    // days and gave HR none.
+    'leave.holidays.view',
+    'leave.holidays.manage',
   ],
 
   // ── Operations ────────────────────────────────────────────────────────────────────
@@ -253,6 +272,11 @@ export const PERMISSION_CATALOG = {
     'library.catalog.manage',
     'library.circulation.manage',
     'library.fines.manage',
+    // Forgiving a charge is not the same duty as raising one, and the library controller has
+    // carried a comment saying so since the module was written. The service already refuses
+    // to let a fine's assessor be its waiver; this makes the separation a grant as well as a
+    // data rule, so it holds for someone who never assessed anything.
+    'library.fines.waive',
   ],
   transport: [
     'transport.view',
@@ -271,10 +295,37 @@ export const PERMISSION_CATALOG = {
   discipline: ['discipline.records.view', 'discipline.records.create', 'discipline.records.action'],
 
   // ── Cross-cutting ─────────────────────────────────────────────────────────────────
-  document: ['documents.templates.manage', 'documents.generate', 'documents.verify'],
+  document: [
+    'documents.templates.manage',
+    'documents.generate',
+    'documents.verify',
+    // Deciding a document request is a separate duty from authoring the template it will be
+    // rendered from. It rode on `documents.templates.manage`, which is why only the principal
+    // and the owner could decide one — defensible by accident rather than by design.
+    'documents.requests.approve',
+    // Withdrawing an issued certificate is heavier than issuing one: somebody is holding a
+    // document that is about to stop verifying.
+    'documents.revoke',
+    // The issuance register is a report over who was given what. It rode on
+    // `documents.generate`, so the ability to print one certificate carried the ability to
+    // read every certificate ever issued.
+    'documents.register.view',
+  ],
   report: ['reports.view', 'reports.build', 'reports.export', 'reports.schedule'],
   workflow: ['workflows.view', 'workflows.manage', 'workflows.act'],
-  automation: ['automation.rules.view', 'automation.rules.manage'],
+  automation: [
+    'automation.rules.view',
+    'automation.rules.manage',
+    // Four duties that all rode on `automation.rules.manage` — a grant that means "may
+    // rewrite what the system does automatically" and should not be the price of any of them.
+    'automation.events.emit',
+    'automation.events.process',
+    // The sharpest of the four: an HR clerk should be able to dismiss a document-expiry
+    // suggestion without also being able to edit automation rules.
+    'automation.suggestions.decide',
+    // Execution history is a log, and reading a log is not reading a configuration.
+    'automation.executions.view',
+  ],
 
   // ── AI ────────────────────────────────────────────────────────────────────────────
   ai: [

@@ -313,7 +313,7 @@ export class DocumentsController {
    */
   @Post('requests/:id/approve')
   @InstitutionScoped()
-  @RequirePermissions('documents.templates.manage')
+  @RequirePermissions('documents.requests.approve')
   @Audited({
     module: 'documents',
     resourceType: 'document_request',
@@ -333,7 +333,7 @@ export class DocumentsController {
 
   @Post('requests/:id/reject')
   @InstitutionScoped()
-  @RequirePermissions('documents.templates.manage')
+  @RequirePermissions('documents.requests.approve')
   @Audited({
     module: 'documents',
     resourceType: 'document_request',
@@ -465,7 +465,7 @@ export class DocumentsController {
    */
   @Post('issued/:id/revoke')
   @InstitutionScoped()
-  @RequirePermissions('documents.templates.manage')
+  @RequirePermissions('documents.revoke')
   @Audited({
     module: 'documents',
     resourceType: 'issued_document',
@@ -487,7 +487,7 @@ export class DocumentsController {
 
   @Get('reports/register')
   @InstitutionScoped()
-  @RequirePermissions('documents.generate')
+  @RequirePermissions('documents.register.view')
   @ApiOperation({ summary: 'The issuance register for a date range' })
   async register(
     @CurrentUser() principal: Principal,

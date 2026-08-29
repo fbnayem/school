@@ -425,3 +425,88 @@ describe('separation of duties', () => {
     }
   });
 });
+
+/**
+ * Separations of duty that used to be conflations.
+ *
+ * Each of these routes was guarded by the nearest existing permission because no better
+ * string existed, which meant a broad grant silently carried a narrow, higher-consequence
+ * one. The point of these tests is that the split cannot quietly collapse again: if someone
+ * widens a role, one of these fails.
+ */
+describe('duties that must stay separate', () => {
+  const principal = held('principal');
+  const administrator = held('administrator');
+  const hrManager = held('hr_manager');
+  const controller = held('examination_controller');
+
+  it('the clerk who raises a document request cannot decide it', () => {
+    // The administrator raises requests all day and must not be able to approve their own.
+    expect(administrator.has('documents.generate')).toBe(true);
+    expect(administrator.has('documents.requests.approve')).toBe(false);
+    expect(administrator.has('documents.revoke')).toBe(false);
+    // ...and the person who decides them does not have to be the person who wrote the template.
+    expect(principal.has('documents.requests.approve')).toBe(true);
+    expect(principal.has('documents.revoke')).toBe(true);
+  });
+
+  it('authoring a template does not carry revoking an issued certificate', () => {
+    expect(controller.has('documents.templates.manage')).toBe(true);
+    expect(controller.has('documents.revoke')).toBe(false);
+    expect(controller.has('documents.requests.approve')).toBe(false);
+  });
+
+  it('printing one certificate does not carry reading the whole issuance register', () => {
+    expect(administrator.has('documents.generate')).toBe(true);
+    expect(administrator.has('documents.register.view')).toBe(true);
+    // The teacher generates documents for their own class and has no register access.
+    const teacher = held('teacher');
+    expect(teacher.has('documents.generate')).toBe(true);
+    expect(teacher.has('documents.register.view')).toBe(false);
+  });
+
+  it('dismissing an automation suggestion does not carry rewriting the rules', () => {
+    // This was the sharpest of the conflations: triaging a document-expiry suggestion
+    // required `automation.rules.manage`, which means "may change what the system does
+    // automatically" for the whole institution.
+    expect(hrManager.has('automation.suggestions.decide')).toBe(true);
+    expect(hrManager.has('automation.executions.view')).toBe(true);
+    expect(hrManager.has('automation.rules.manage')).toBe(false);
+    expect(administrator.has('automation.suggestions.decide')).toBe(true);
+    expect(administrator.has('automation.rules.manage')).toBe(false);
+  });
+
+  it('approving a day off does not carry approving a payment for it', () => {
+    const classTeacher = held('class_teacher');
+    expect(classTeacher.has('leave.requests.approve')).toBe(true);
+    expect(classTeacher.has('leave.encashment.approve')).toBe(false);
+    expect(classTeacher.has('leave.balances.adjust')).toBe(false);
+    // Encashment stays with HR and the principal — two people, so a single HR manager who
+    // raises the request is not also its approver.
+    expect(hrManager.has('leave.encashment.approve')).toBe(true);
+    expect(principal.has('leave.encashment.approve')).toBe(true);
+  });
+
+  it('seeing the leave calendar does not carry seeing what it costs', () => {
+    const classTeacher = held('class_teacher');
+    expect(classTeacher.has('leave.requests.view.all')).toBe(true);
+    expect(classTeacher.has('leave.reports.view')).toBe(false);
+    expect(principal.has('leave.reports.view')).toBe(true);
+  });
+
+  it('adjusting an entitlement is HR policy, not an approver’s discretion', () => {
+    expect(hrManager.has('leave.balances.adjust')).toBe(true);
+    expect(principal.has('leave.balances.adjust')).toBe(false);
+    expect(administrator.has('leave.balances.adjust')).toBe(false);
+  });
+
+  it('charging a library fine does not carry forgiving one', () => {
+    // The librarian holds `library.*`, so the grant alone cannot separate these — which is
+    // why the service also refuses a fine's assessor as its waiver. Everyone else who can
+    // charge must not be able to forgive.
+    const accountant = held('accountant');
+    expect(accountant.has('library.fines.waive')).toBe(false);
+    expect(administrator.has('library.fines.waive')).toBe(false);
+    expect(held('librarian').has('library.fines.waive')).toBe(true);
+  });
+});

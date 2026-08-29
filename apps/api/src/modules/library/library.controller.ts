@@ -10,13 +10,13 @@
  *   library.catalog.view        — browse the catalogue (categories, titles, copies)
  *   library.catalog.manage      — maintain it: titles, copies, settings, stock-take
  *   library.circulation.manage  — memberships, issue/return/renew, reservations
- *   library.fines.manage        — assess, collect and (for now) waive fines
+ *   library.fines.manage        — assess and collect fines
+ *   library.fines.waive         — forgive one, which is a different duty from raising it
  *
- * Waiving a fine *should* carry its own permission (`library.fines.waive`, mirroring
- * `finance.discounts.approve`) so that the person who charges cannot also forgive. That
- * string does not exist in `packages/permissions/src/catalog.ts`, so the route uses
- * `library.fines.manage` and the service enforces the separation on the data instead: the
- * assessor of a fine can never be its waiver, whoever holds the permission.
+ * Waiving a fine carries its own permission, mirroring `finance.discounts.approve`, so that
+ * the ability to charge does not imply the ability to forgive. The service enforces the
+ * separation on the data as well: the assessor of a fine can never be its waiver, whoever
+ * holds the permission — which is what still protects a librarian granted `library.*`.
  *
  * Self-service (`my-loans`) is `@Authenticated()` — the service derives the member set from
  * the caller's own student, employee or guardian identity and fails closed, so there is no
@@ -662,12 +662,13 @@ export class LibraryController {
   }
 
   /**
-   * Waiving: mandatory reason, and the service refuses the person who assessed the fine.
-   * See the file header — this route should carry a distinct `library.fines.waive`, which
-   * does not exist in the permission catalog yet.
+   * Waiving: mandatory reason, its own permission, and the service refuses the person who
+   * assessed the fine. Two layers on purpose — `library.fines.waive` means "may forgive a
+   * charge at all", and the data rule means "not this one, you raised it", which holds even
+   * for a librarian whose role grant is `library.*`.
    */
   @Post('fines/:id/waive')
-  @RequirePermissions('library.fines.manage')
+  @RequirePermissions('library.fines.waive')
   @Audited({
     module: 'library',
     resourceType: 'library_fine',
