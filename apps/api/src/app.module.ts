@@ -37,6 +37,15 @@ import { TimetableModule } from './modules/timetable/timetable.module';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { ExamsModule } from './modules/exams/exams.module';
 import { FeesModule } from './modules/fees/fees.module';
+import { AdmissionsModule } from './modules/admissions/admissions.module';
+import { HrModule } from './modules/hr/hr.module';
+import { WorkflowModule } from './modules/workflow/workflow.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { HomeworkModule } from './modules/homework/homework.module';
+import { DisciplineModule } from './modules/discipline/discipline.module';
+import { PaymentGatewayModule } from './modules/payment-gateway/payment-gateway.module';
+import { AccountingModule } from './modules/accounting/accounting.module';
+import { LibraryModule } from './modules/library/library.module';
 
 @Module({
   imports: [
@@ -78,16 +87,30 @@ import { FeesModule } from './modules/fees/fees.module';
     AttendanceModule,
     ExamsModule,
     FeesModule,
+    AdmissionsModule,
+    HrModule,
+    WorkflowModule,
+    NotificationsModule,
+    HomeworkModule,
+    DisciplineModule,
+    PaymentGatewayModule,
+    AccountingModule,
+    LibraryModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
-    // Interceptors run in registration order on the way in, reverse on the way out — so
-    // serialisation strips `__audit` only after the audit interceptor has read it.
-    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+    // Interceptors run in registration order on the way in and in reverse on the way out, so
+    // the FIRST registered is outermost and its response handling runs LAST. Serialisation
+    // must therefore be registered first: it strips `__audit` from the wire, and it has to do
+    // that after the audit interceptor has read the before/after hint out of it.
+    //
+    // Registered the other way round, every audit record silently gets a null previous_value —
+    // the mutation is logged but what it changed is lost. Regression: audit-before-after.spec.
     { provide: APP_INTERCEPTOR, useClass: SerializationInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })

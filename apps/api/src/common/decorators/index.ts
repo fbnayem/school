@@ -86,6 +86,18 @@ export interface AuditMetadata {
    * "why" is part of the record: attendance corrections, mark changes, refunds, fee waivers.
    */
   requiresReason?: boolean;
+  /**
+   * The service already wrote this record inside its own transaction.
+   *
+   * The interceptor then writes nothing, but the route still counts as audited for the
+   * boot-time route audit and `requiresReason` is still enforced. Without this, a service
+   * that audits in-transaction AND carries the decorator produces TWO rows per action: the
+   * service's, with the before-state, and the interceptor's, with a null previous_value.
+   *
+   * In-transaction is the stronger guarantee — a rolled-back change leaves no trail and a
+   * committed one always has one — so where a service does it, the interceptor stands down.
+   */
+  recordedBy?: 'interceptor' | 'service';
 }
 
 /** Record this action in the immutable audit log. */

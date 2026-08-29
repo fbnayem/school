@@ -213,6 +213,11 @@ export const enrollments = pgTable(
     index('enrollments_section_idx').on(table.sectionId, table.status),
     index('enrollments_student_idx').on(table.studentId),
     index('enrollments_year_class_idx').on(table.academicYearId, table.classLevelId),
+    // The seat-count predicate, verbatim: capacity enforcement and seat-freeing count
+    // `status = 'active' AND archived_at IS NULL` rows per section on every lifecycle write.
+    index('enrollments_section_active_idx')
+      .on(table.sectionId)
+      .where(sql`${table.status} = 'active' AND ${table.archivedAt} IS NULL`),
   ],
 );
 
@@ -375,6 +380,9 @@ export const studentDocuments = pgTable(
   (table) => [
     index('student_documents_student_idx').on(table.studentId, table.documentType),
     index('student_documents_tenant_idx').on(table.tenantId),
+    // Joins a document to its file row, and finds the owning document during signed-URL
+    // redemption.
+    index('student_documents_file_idx').on(table.fileId),
   ],
 );
 
@@ -421,6 +429,9 @@ export const studentStatusHistory = pgTable(
   (table) => [
     index('student_status_history_student_idx').on(table.studentId, table.effectiveDate),
     index('student_status_history_tenant_idx').on(table.tenantId),
+    // An inter-institution transfer writes history on both sides; each institution reads its
+    // own side by institution and date.
+    index('student_status_history_institution_idx').on(table.institutionId, table.effectiveDate),
   ],
 );
 

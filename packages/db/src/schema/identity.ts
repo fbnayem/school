@@ -15,6 +15,7 @@
 
 import { relations, sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   index,
   inet,
@@ -66,6 +67,12 @@ export const users = pgTable(
     mfaEnabled: boolean('mfa_enabled').notNull().default(false),
     mfaSecret: text('mfa_secret'),
     mfaRecoveryCodes: jsonb('mfa_recovery_codes'),
+    /**
+     * The highest TOTP time step (unix-seconds / 30) this user has successfully verified.
+     * A code whose step is not strictly greater is a replay and is refused — accepting a
+     * captured code twice within its 30-second window defeats the point of a second factor.
+     */
+    mfaLastVerifiedStep: bigint('mfa_last_verified_step', { mode: 'number' }),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true, mode: 'date' }),
     lastLoginIp: inet('last_login_ip'),
     /** Brute-force containment. Reset on a successful login. */
@@ -265,6 +272,14 @@ export const authTokens = pgTable(
     index('auth_tokens_expiry_idx')
       .on(table.expiresAt)
       .where(sql`${table.usedAt} IS NULL`),
+    // Re-inviting someone revokes their previous pending invitation; this is that lookup.
+    index('auth_tokens_email_purpose_idx')
+      .on(table.email, table.purpose)
+      .where(sql`${table.usedAt} IS NULL AND ${table.revokedAt} IS NULL`),
+    index('auth_tokens_phone_purpose_idx')
+      .on(table.phone, table.purpose)
+      .where(sql`${table.usedAt} IS NULL AND ${table.revokedAt} IS NULL`),
+    index('auth_tokens_tenant_idx').on(table.tenantId),
   ],
 );
 

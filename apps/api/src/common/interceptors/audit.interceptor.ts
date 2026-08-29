@@ -85,6 +85,11 @@ export class AuditInterceptor implements NestInterceptor {
     request: Request & { principal?: Principal; body?: Record<string, unknown> },
     result: unknown,
   ): Promise<void> {
+    // The service wrote the record inside its own transaction; a second one here would be a
+    // duplicate with no before-state. The decorator stays for `requiresReason` and the
+    // boot-time route audit.
+    if (metadata.recordedBy === 'service') return;
+
     try {
       const ctx = currentContext();
       const principal = request.principal;

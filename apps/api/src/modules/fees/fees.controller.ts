@@ -327,6 +327,7 @@ export class FeesController {
     action: 'approve',
     resourceIdFrom: 'param:id',
     requiresReason: true,
+    recordedBy: 'service',
   })
   @ApiOperation({ summary: 'Approve or reject a fee concession' })
   async decideConcession(
@@ -385,6 +386,7 @@ export class FeesController {
     resourceType: 'late_fine_run',
     action: 'update',
     requiresReason: true,
+    recordedBy: 'service',
   })
   @ApiOperation({ summary: 'Apply late fines to overdue invoices' })
   async applyLateFines(
@@ -433,6 +435,7 @@ export class FeesController {
     action: 'archive',
     resourceIdFrom: 'param:id',
     requiresReason: true,
+    recordedBy: 'service',
   })
   @ApiOperation({ summary: 'Void an invoice' })
   async voidInvoice(
@@ -467,6 +470,7 @@ export class FeesController {
     resourceType: 'payment',
     action: 'payment',
     resourceIdFrom: 'response:id',
+    recordedBy: 'service',
   })
   @ApiOperation({ summary: 'Record a payment and allocate it to invoices' })
   async recordPayment(
@@ -488,6 +492,7 @@ export class FeesController {
     action: 'refund',
     resourceIdFrom: 'param:id',
     requiresReason: true,
+    recordedBy: 'service',
   })
   @ApiOperation({ summary: 'Reverse a payment' })
   async reversePayment(

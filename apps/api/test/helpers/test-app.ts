@@ -36,6 +36,19 @@ export const TEST_PASSWORD = 'TestPassword2026!';
 let migrated = false;
 
 /**
+ * Guardian phone numbers, unique across every tenant seeded in a process.
+ *
+ * Previously derived from the prefix length and the loop index, which silently truncated: a
+ * prefix of ten or more characters pushed the index past the 14-character limit and gave every
+ * guardian in that tenant the same number, colliding on guardians_institution_phone_key. A
+ * monotonic counter has no such dependency on the caller's naming.
+ */
+let guardianPhoneSequence = 0;
+function nextGuardianPhone(): string {
+  return `+88017${String(guardianPhoneSequence++).padStart(8, '0')}`;
+}
+
+/**
  * Apply migrations to the test database once per process.
  *
  * Idempotent by design — the migrator records what it has applied — so calling it from every
@@ -327,7 +340,7 @@ export async function seedTenant(
           institutionId,
           guardianUserId,
           `${prefix} Guardian ${i + 1}`,
-          `+8801${prefix.length}${String(i).padStart(8, '0')}`.slice(0, 14),
+          nextGuardianPhone(),
         ],
       );
       await client.query(

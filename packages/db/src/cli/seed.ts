@@ -34,6 +34,9 @@ import {
   generatePerson,
   generatePhone,
 } from '../seed/demo-data';
+import { loadRepoEnv } from './load-env';
+
+loadRepoEnv();
 
 const DEMO_TENANT_SLUG = 'dhaka-future-academy';
 const DEMO_PASSWORD = 'ShikkhaDemo2026!';

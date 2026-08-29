@@ -8,6 +8,8 @@
  */
 
 import 'reflect-metadata';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
@@ -17,7 +19,27 @@ import { corsOrigins, loadEnv } from './config/env';
 import { getLogger, initLogger } from './common/logger';
 import { assertRoutesProtected } from './common/route-audit';
 
+/**
+ * Load the repository .env before configuration is validated.
+ *
+ * Variables already present in the environment always win, matching node --env-file, so a
+ * container or CI runner is never overridden by a file that happened to be copied in. In
+ * production the file is normally absent and this is a no-op.
+ *
+ * Without this, `pnpm dev` fails on a clean shell with "DATABASE_URL: Required" even though
+ * .env is sitting in the repository root, and the README documents it as working.
+ */
+function loadRepoEnv(): void {
+  for (const candidate of ['../../.env', '../../../.env']) {
+    const path = resolve(__dirname, candidate);
+    if (!existsSync(path)) continue;
+    process.loadEnvFile(path);
+    return;
+  }
+}
+
 async function bootstrap(): Promise<void> {
+  loadRepoEnv();
   // Validated first. A missing JWT_SECRET should fail here, loudly, not at the first login.
   const config = loadEnv();
   const logger = initLogger({

@@ -13,6 +13,9 @@
 
 import { resolve } from 'node:path';
 import { migrate, migrationStatus } from '../migrator';
+import { loadRepoEnv } from './load-env';
+
+loadRepoEnv();
 
 // The package compiles to CommonJS, so `__dirname` is the portable form here; `import.meta`
 // would only work under an ESM build and this script runs both via tsx and from dist/.

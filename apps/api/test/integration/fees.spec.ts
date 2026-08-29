@@ -353,8 +353,10 @@ describe('Fee management', () => {
           client.query(
             `insert into invoices (tenant_id, institution_id, student_id, academic_year_id,
                                    invoice_number, generation_key, billing_period_start,
-                                   billing_period_end, issue_date, due_date, total, balance)
-             values ($1,$2,$3,$4,'INV-DUP-1',$5,'2026-01-01','2026-01-31','2026-01-01','2026-01-10','1000.00','1000.00')`,
+                                   billing_period_end, issue_date, due_date,
+                                   subtotal, total, balance)
+             values ($1,$2,$3,$4,'INV-DUP-1',$5,'2026-01-01','2026-01-31','2026-01-01','2026-01-10',
+                     '1000.00','1000.00','1000.00')`,
             [
               tenantA.tenantId,
               tenantA.institutionId,

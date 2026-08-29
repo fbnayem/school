@@ -12,13 +12,14 @@
 
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { sessions, users } from '@shikkha/db';
+import { authTokens, sessions, users } from '@shikkha/db';
 import {
   ForbiddenError,
   UnauthenticatedError,
   ValidationError,
   uuidv7,
   normalizeBdMobile,
+  secureToken,
 } from '@shikkha/shared';
 import { DatabaseService } from '../database/database.service';
 import { PasswordService } from './password.service';
@@ -57,7 +58,24 @@ export interface LoginResult extends AuthTokens {
   };
 }
 
+/**
+ * Returned instead of a session when the account has TOTP enabled. The challenge token is
+ * a short-lived, single-use, hashed credential proving only "the password was correct";
+ * it grants nothing until `POST /auth/mfa/verify` upgrades it with a valid second factor.
+ */
+export interface MfaChallengeResult {
+  mfaRequired: true;
+  challengeToken: string;
+  /** Seconds until the challenge expires and the password must be re-entered. */
+  expiresInSeconds: number;
+}
+
+type UserRow = typeof users.$inferSelect;
+
 const GENERIC_LOGIN_FAILURE = 'Incorrect credentials. Please check and try again.';
+
+/** How long the window between "password verified" and "TOTP verified" may stay open. */
+export const MFA_CHALLENGE_TTL_SECONDS = 300;
 
 @Injectable()
 export class AuthService {
@@ -70,7 +88,7 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
-  async login(input: LoginInput): Promise<LoginResult> {
+  async login(input: LoginInput): Promise<LoginResult | MfaChallengeResult> {
     const config = env();
     const identifier = normalizeIdentifier(input.identifier);
 
@@ -176,11 +194,27 @@ export class AuthService {
       }
     }
 
+    // Second factor enabled: the password alone earns a short-lived challenge, never a
+    // session. `MfaService.verifyChallenge` upgrades it after a valid TOTP/recovery code.
+    if (user.mfaEnabled && user.mfaSecret) {
+      return this.issueMfaChallenge(user);
+    }
+
+    return this.completeLogin(user, input.deviceLabel);
+  }
+
+  /**
+   * Everything that happens once an identity is fully proven — password alone for ordinary
+   * accounts, password + second factor for MFA accounts. Public because `MfaService` is
+   * the second caller, and duplicating session issuance would eventually diverge on
+   * exactly the fields that matter (family id, credentials version).
+   */
+  async completeLogin(user: UserRow, deviceLabel?: string): Promise<LoginResult> {
     const issued = await this.createSession(
       user.id,
       user.tenantId,
       user.credentialsChangedAt.getTime(),
-      input.deviceLabel,
+      deviceLabel,
     );
     await this.markLoginSuccess(user.id);
 
@@ -188,7 +222,7 @@ export class AuthService {
       eventType: 'login_success',
       userId: user.id,
       tenantId: user.tenantId,
-      detail: { device: input.deviceLabel ?? null },
+      detail: { device: deviceLabel ?? null, mfa: user.mfaEnabled },
     });
     await this.audit.record({
       tenantId: user.tenantId,
@@ -214,6 +248,36 @@ export class AuthService {
         isPlatformAdmin: user.isPlatformAdmin,
         mustChangePassword: user.mustChangePassword,
       },
+    };
+  }
+
+  private async issueMfaChallenge(user: UserRow): Promise<MfaChallengeResult> {
+    const token = secureToken(32);
+    const expiresAt = new Date(Date.now() + MFA_CHALLENGE_TTL_SECONDS * 1000);
+
+    // Platform-relaxed for the same reason the login lookup is: there is no authenticated
+    // tenant context yet. The row is scoped to exactly one user by construction.
+    await this.db.runAsPlatform(async (tx) => {
+      await tx.insert(authTokens).values({
+        tenantId: user.tenantId,
+        userId: user.id,
+        purpose: 'mfa_challenge',
+        tokenHash: hashToken(token),
+        expiresAt,
+      });
+    });
+
+    await this.securityEvents.record({
+      eventType: 'mfa_challenge',
+      userId: user.id,
+      tenantId: user.tenantId,
+      detail: { phase: 'challenge_issued' },
+    });
+
+    return {
+      mfaRequired: true,
+      challengeToken: token,
+      expiresInSeconds: MFA_CHALLENGE_TTL_SECONDS,
     };
   }
 
@@ -389,6 +453,20 @@ export class AuthService {
           credentialsChangedAt: sql`now()`,
         })
         .where(eq(users.id, userId));
+
+      // A pending reset link issued before this change is a credential for the *old*
+      // situation; a password change must leave no other way to set a password behind it.
+      await tx
+        .update(authTokens)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(authTokens.userId, userId),
+            eq(authTokens.purpose, 'password_reset'),
+            isNull(authTokens.usedAt),
+            isNull(authTokens.revokedAt),
+          ),
+        );
     });
 
     // Changing a password logs out other devices. If the password was changed because it was
@@ -535,7 +613,7 @@ export class AuthService {
  * account. Without it, a parent who typed their number differently at registration is simply
  * locked out with no way to discover why.
  */
-function normalizeIdentifier(raw: string): { kind: 'email' | 'phone'; value: string } {
+export function normalizeIdentifier(raw: string): { kind: 'email' | 'phone'; value: string } {
   const trimmed = raw.trim();
   if (trimmed.includes('@')) {
     return { kind: 'email', value: trimmed.toLowerCase() };

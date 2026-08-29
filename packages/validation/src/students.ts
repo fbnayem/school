@@ -215,3 +215,232 @@ export const enrollStudentSchema = z.object({
   enrolledOn: calendarDateSchema,
   isRepeating: z.boolean().default(false),
 });
+
+export type EnrollStudentInput = z.infer<typeof enrollStudentSchema>;
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// Lifecycle (Phase 3 completion): standalone enrolment, promotion, transfer, withdrawal,
+// readmission, import/export, documents and bulk operations.
+//
+// Each mutation gets its own schema because each is its own endpoint with its own permission
+// and audit action — the same reasoning that keeps status change out of `updateStudentSchema`.
+// ─────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Withdrawal. The effective date is when the student actually left, which is routinely days
+ * before the clerk records it; attendance and fee calculations key on the real date.
+ */
+export const withdrawStudentSchema = z.object({
+  effectiveDate: calendarDateSchema,
+  reason: reasonSchema,
+});
+
+export type WithdrawStudentInput = z.infer<typeof withdrawStudentSchema>;
+
+/** Readmission reopens the record with a brand-new enrolment; nothing is reused or edited. */
+export const readmitStudentSchema = z.object({
+  academicYearId: uuidSchema,
+  sectionId: uuidSchema,
+  /** Omitted: the next free roll number in the section is assigned. */
+  rollNumber: z.string().trim().min(1).max(16).optional(),
+  effectiveDate: calendarDateSchema,
+  reason: z.string().trim().max(1000).optional(),
+});
+
+export type ReadmitStudentInput = z.infer<typeof readmitStudentSchema>;
+
+/** Section transfer within the same institution and the same academic year. */
+export const transferSectionSchema = z.object({
+  targetSectionId: uuidSchema,
+  /** Omitted: the next free roll number in the target section is assigned. */
+  rollNumber: z.string().trim().min(1).max(16).optional(),
+  effectiveDate: calendarDateSchema,
+  reason: reasonSchema,
+});
+
+export type TransferSectionInput = z.infer<typeof transferSectionSchema>;
+
+/** Transfer between two institutions of the same tenant (a school group). */
+export const transferInstitutionSchema = z.object({
+  targetInstitutionId: uuidSchema,
+  targetSectionId: uuidSchema,
+  rollNumber: z.string().trim().min(1).max(16).optional(),
+  effectiveDate: calendarDateSchema,
+  reason: reasonSchema,
+});
+
+export type TransferInstitutionInput = z.infer<typeof transferInstitutionSchema>;
+
+/**
+ * Bulk promotion of one section into the next academic year.
+ *
+ * Retention is an explicit per-student decision carried in `retainedStudentIds` — a retained
+ * student is re-enrolled in `repeatSectionId` (same class level, next year), which is
+ * required whenever any student is retained.
+ */
+export const promoteSectionSchema = z
+  .object({
+    sourceSectionId: uuidSchema,
+    targetSectionId: uuidSchema,
+    /** Where retained students repeat the year. Required when `retainedStudentIds` is set. */
+    repeatSectionId: uuidSchema.optional(),
+    effectiveDate: calendarDateSchema,
+    retainedStudentIds: z.array(uuidSchema).max(500).default([]),
+  })
+  .superRefine((data, ctx) => {
+    if (data.targetSectionId === data.sourceSectionId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['targetSectionId'],
+        message: 'The target section must be different from the source section',
+      });
+    }
+    if (data.retainedStudentIds.length > 0 && !data.repeatSectionId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['repeatSectionId'],
+        message: 'Choose the section retained students will repeat the year in',
+      });
+    }
+  });
+
+export type PromoteSectionInput = z.infer<typeof promoteSectionSchema>;
+
+/** Statuses a bulk status change may set. Withdrawal and transfer have their own flows. */
+export const BULK_STUDENT_STATUSES = ['active', 'on_leave'] as const;
+
+export const bulkStatusChangeSchema = z.object({
+  studentIds: z.array(uuidSchema).min(1).max(200),
+  status: z.enum(BULK_STUDENT_STATUSES),
+  effectiveDate: calendarDateSchema,
+  reason: reasonSchema,
+});
+
+export type BulkStatusChangeInput = z.infer<typeof bulkStatusChangeSchema>;
+
+export const bulkSectionChangeSchema = z.object({
+  studentIds: z.array(uuidSchema).min(1).max(200),
+  targetSectionId: uuidSchema,
+  effectiveDate: calendarDateSchema,
+  reason: reasonSchema,
+});
+
+export type BulkSectionChangeInput = z.infer<typeof bulkSectionChangeSchema>;
+
+// ── Import / export ──────────────────────────────────────────────────────────────────
+
+/** Hard cap on rows per import request. Bigger files are split by the client. */
+export const STUDENT_IMPORT_MAX_ROWS = 500;
+
+/**
+ * The CSV travels inside a JSON body, whose global size limit is 100 kB — so this cap is
+ * what turns "payload too large" into a message a person can act on rather than a raw 413.
+ */
+export const STUDENT_IMPORT_MAX_BYTES = 90_000;
+
+/**
+ * The importable columns, by header name. Deliberately the scalar subset of
+ * `createStudentSchema` — enrolment, medical data and documents go through their own
+ * endpoints with their own permissions.
+ */
+export const STUDENT_IMPORT_COLUMNS = [
+  'studentCode',
+  'admissionNumber',
+  'admissionDate',
+  'fullNameEn',
+  'fullNameBn',
+  'nickname',
+  'dateOfBirth',
+  'gender',
+  'bloodGroup',
+  'religion',
+  'nationality',
+  'birthRegistrationNumber',
+  'nationalId',
+  'fatherNameEn',
+  'fatherNameBn',
+  'motherNameEn',
+  'motherNameBn',
+  'phone',
+  'email',
+  'presentAddress',
+  'permanentAddress',
+  'district',
+  'division',
+  'previousInstitutionName',
+  'previousClassCompleted',
+  'transferCertificateNumber',
+] as const;
+
+export const importStudentsSchema = z.object({
+  csv: z.string().min(1, 'The CSV content is empty').max(STUDENT_IMPORT_MAX_BYTES),
+});
+
+export type ImportStudentsInput = z.infer<typeof importStudentsSchema>;
+
+/** Hard cap on exported rows; a full-school export fits, a runaway query does not. */
+export const STUDENT_EXPORT_MAX_ROWS = 5000;
+
+/**
+ * Export takes the list endpoint's filters but no pagination — the caller's data scope is
+ * applied identically, so a teacher exports exactly what they can list, and nothing more.
+ */
+export const exportStudentsSchema = searchSchema.extend({
+  format: z.enum(['csv', 'json']).default('csv'),
+  academicYearId: uuidSchema.optional(),
+  classLevelId: uuidSchema.optional(),
+  sectionId: uuidSchema.optional(),
+  campusId: uuidSchema.optional(),
+  status: z
+    .enum(['active', 'on_leave', 'transferred', 'withdrawn', 'graduated', 'alumni', 'archived'])
+    .optional(),
+  gender: z.enum(GENDERS).optional(),
+});
+
+export type ExportStudentsInput = z.infer<typeof exportStudentsSchema>;
+
+// ── Documents ────────────────────────────────────────────────────────────────────────
+
+export const STUDENT_DOCUMENT_TYPES = [
+  'birth_certificate',
+  'transfer_certificate',
+  'photo',
+  'medical',
+  'other',
+] as const;
+
+export const uploadStudentDocumentSchema = z
+  .object({
+    documentType: z.enum(STUDENT_DOCUMENT_TYPES),
+    title: z.string().trim().min(1, 'Give the document a title').max(255),
+    documentNumber: z.string().trim().max(64).optional(),
+    issuedOn: calendarDateSchema.optional(),
+    expiresOn: calendarDateSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.issuedOn && data.expiresOn && data.expiresOn < data.issuedOn) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expiresOn'],
+        message: 'A document cannot expire before it was issued',
+      });
+    }
+  });
+
+export type UploadStudentDocumentInput = z.infer<typeof uploadStudentDocumentSchema>;
+
+export const studentDocumentParamsSchema = z.object({
+  id: uuidSchema,
+  documentId: uuidSchema,
+});
+
+export const archiveStudentDocumentSchema = z.object({
+  reason: reasonSchema,
+});
+
+/** Redemption of a signed download URL. The signature, not a session, is the credential. */
+export const fileDownloadQuerySchema = z.object({
+  key: z.string().min(1).max(512),
+  expires: z.string().regex(/^\d{1,12}$/, 'Invalid expiry'),
+  signature: z.string().regex(/^[0-9a-f]{64}$/, 'Invalid signature'),
+});

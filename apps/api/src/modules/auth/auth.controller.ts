@@ -18,13 +18,17 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import {
   changePasswordSchema,
+  forgotPasswordSchema,
   loginSchema,
   refreshSchema,
+  resetPasswordSchema,
   type LoginInput as LoginBody,
 } from '@shikkha/validation';
+import { z } from 'zod';
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, UnauthenticatedError } from '@shikkha/shared';
 import { ALL_PERMISSIONS, effectivePermissions, type Principal } from '@shikkha/permissions';
 import { AuthService } from './auth.service';
+import { PasswordResetService } from './password-reset.service';
 import { PrincipalService } from './principal.service';
 import { Authenticated, CurrentUser, Public } from '../../common/decorators';
 import { AuthRateLimit } from '../../common/guards/rate-limit.guard';
@@ -40,6 +44,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly principals: PrincipalService,
+    private readonly passwordReset: PasswordResetService,
   ) {}
 
   @Public()
@@ -54,6 +59,17 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const result = await this.auth.login(body);
+
+    // Accounts with TOTP enabled get a short-lived challenge instead of a session. No
+    // cookies are set: nothing has been fully authenticated yet.
+    if ('mfaRequired' in result) {
+      return {
+        mfaRequired: true,
+        challengeToken: result.challengeToken,
+        expiresIn: result.expiresInSeconds,
+      };
+    }
+
     setAuthCookies(response, result.accessToken, result.refreshToken, result.refreshTokenExpiresAt);
     return {
       user: result.user,
@@ -61,6 +77,33 @@ export class AuthController {
       refreshToken: result.refreshToken,
       expiresIn: result.accessTokenExpiresIn,
     };
+  }
+
+  /**
+   * Anti-enumeration contract: the response — body, status, and the Argon2-shaped work
+   * behind it — is identical whether or not the identifier matches an account. See
+   * `PasswordResetService.request`.
+   */
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @AuthRateLimit()
+  @ApiOperation({ summary: 'Request a password reset by email or phone number' })
+  async forgotPassword(
+    @Body(zodBody(forgotPasswordSchema)) body: z.infer<typeof forgotPasswordSchema>,
+  ) {
+    return this.passwordReset.request(body.identifier);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @AuthRateLimit()
+  @ApiOperation({ summary: 'Set a new password using a reset link' })
+  async resetPassword(
+    @Body(zodBody(resetPasswordSchema)) body: z.infer<typeof resetPasswordSchema>,
+  ): Promise<void> {
+    await this.passwordReset.reset(body.token, body.newPassword);
   }
 
   @Public()

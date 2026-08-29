@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import { bdPhoneSchema, paginationSchema, reasonSchema, uuidSchema } from './common';
 
 /** Trim before validating: a trailing space in a pasted email should not fail the form. */
 export const emailSchema = z
@@ -93,8 +94,84 @@ export const acceptInvitationSchema = z
     confirmPassword: z.string(),
     fullNameEn: z.string().trim().min(2).max(255),
     fullNameBn: z.string().trim().max(255).optional(),
+    /**
+     * Optional because most invitations already carry the address they were sent to. It is
+     * used only when the invitation was issued against a phone number alone — many
+     * Bangladeshi parents have no email — and the acceptor wants a real one on file.
+     */
+    email: emailSchema.optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: 'The passwords do not match',
     path: ['confirmPassword'],
   });
+
+/**
+ * Invite a staff/portal user.
+ *
+ * At least one delivery identifier is required. Roles are granted by id — never by name —
+ * and the server independently verifies that the inviter holds every permission the chosen
+ * roles would confer, so this schema deliberately carries no permission strings at all.
+ */
+export const inviteUserSchema = z
+  .object({
+    email: emailSchema.optional(),
+    phone: bdPhoneSchema.optional(),
+    fullNameEn: z.string().trim().min(2).max(255),
+    fullNameBn: z.string().trim().max(255).optional(),
+    roleIds: z.array(uuidSchema).min(1, 'Choose at least one role').max(10),
+    locale: z.enum(['en', 'bn']).default('en'),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.email && !data.phone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['email'],
+        message: 'Provide an email address or a mobile number to send the invitation to',
+      });
+    }
+  });
+
+export type InviteUserInput = z.infer<typeof inviteUserSchema>;
+
+export const revokeInvitationSchema = z.object({
+  reason: reasonSchema,
+});
+
+export const listInvitationsSchema = paginationSchema.extend({
+  includeExpired: z.coerce.boolean().default(false),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// Multi-factor authentication (TOTP)
+// ─────────────────────────────────────────────────────────────────────────────────────
+
+/** A 6-digit TOTP code. Trimmed because authenticator apps show it with a space. */
+export const totpCodeSchema = z
+  .string()
+  .trim()
+  .transform((value) => value.replace(/\s+/g, ''))
+  .pipe(z.string().regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app'));
+
+export const mfaEnableSchema = z.object({
+  code: totpCodeSchema,
+});
+
+/**
+ * Second login step. `code` accepts either a 6-digit TOTP code or a recovery code
+ * (XXXX-XXXX), so a user whose phone is lost is not locked out at the schema layer.
+ */
+export const mfaVerifySchema = z.object({
+  challengeToken: z.string().min(20).max(200),
+  code: z.string().trim().min(6).max(24),
+  deviceLabel: z.string().trim().max(128).optional(),
+});
+
+/** Disabling a second factor is a sensitive action and always re-proves the password. */
+export const mfaDisableSchema = z.object({
+  password: z.string().min(1, 'Enter your password').max(128),
+});
+
+export const mfaRegenerateRecoveryCodesSchema = z.object({
+  password: z.string().min(1, 'Enter your password').max(128),
+});

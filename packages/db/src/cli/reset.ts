@@ -10,6 +10,9 @@
 import { resolve } from 'node:path';
 import { Client } from 'pg';
 import { migrate } from '../migrator';
+import { loadRepoEnv } from './load-env';
+
+loadRepoEnv();
 
 const MIGRATIONS_DIR = resolve(__dirname, '../../migrations');
 

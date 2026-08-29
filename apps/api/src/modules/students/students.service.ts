@@ -64,7 +64,12 @@ export interface ListStudentsQuery {
   includeArchived: boolean;
 }
 
-type StudentRow = typeof students.$inferSelect;
+export type StudentRow = typeof students.$inferSelect;
+export type EnrollmentRow = typeof enrollments.$inferSelect;
+export type StatusHistoryRow = typeof studentStatusHistory.$inferSelect;
+
+/** The transaction handle services pass around; identical to `runInTenant`'s callback arg. */
+export type Tx = Parameters<Parameters<DatabaseService['runInTenant']>[0]>[0];
 
 @Injectable()
 export class StudentsService {
@@ -78,31 +83,7 @@ export class StudentsService {
     const scope = this.requireScope(principal);
 
     return this.db.runInTenant(async (tx) => {
-      const filters: SQL[] = [this.scopeFilter(principal, scope)];
-
-      if (!query.includeArchived) {
-        filters.push(isNull(students.archivedAt));
-      } else if (!can(principal, 'students.archive')) {
-        // Asking for archived records is itself a privileged read: an archived student is
-        // often one who was withdrawn under circumstances the school does not broadcast.
-        throw new ForbiddenError('students.archive', 'You cannot view archived students');
-      }
-
-      const institutionId = currentContext()?.institutionId;
-      if (institutionId) filters.push(eq(students.institutionId, institutionId));
-      if (query.status) filters.push(eq(students.status, query.status as StudentRow['status']));
-      if (query.gender) filters.push(eq(students.gender, query.gender as StudentRow['gender']));
-
-      if (query.q) {
-        filters.push(this.searchFilter(query.q));
-      }
-
-      // Enrolment-based filters need a subquery rather than a join, so a student with several
-      // historical enrolments is not returned once per enrolment.
-      const enrollmentFilter = this.enrollmentFilter(query);
-      if (enrollmentFilter) filters.push(enrollmentFilter);
-
-      const where = and(...filters);
+      const where = and(...this.listFilters(principal, scope, query));
       const orderBy = parseSort(query.sort, STUDENT_SORT_FIELDS, {
         field: 'fullNameEn',
         direction: 'asc',
@@ -129,6 +110,80 @@ export class StudentsService {
         counted?.total ?? 0,
         page,
       );
+    });
+  }
+
+  /**
+   * The complete filter set for a list-shaped read, shared verbatim between `list` and
+   * `queryScoped` (the export path). One implementation is the point: an export that built
+   * its own filters would eventually diverge from the list and leak rows the caller cannot
+   * list — precisely the bug the data-scope design exists to prevent.
+   */
+  private listFilters(principal: Principal, scope: DataScope, query: ListStudentsQuery): SQL[] {
+    const filters: SQL[] = [this.scopeFilter(principal, scope)];
+
+    if (!query.includeArchived) {
+      filters.push(isNull(students.archivedAt));
+    } else if (!can(principal, 'students.archive')) {
+      // Asking for archived records is itself a privileged read: an archived student is
+      // often one who was withdrawn under circumstances the school does not broadcast.
+      throw new ForbiddenError('students.archive', 'You cannot view archived students');
+    }
+
+    const institutionId = currentContext()?.institutionId;
+    if (institutionId) filters.push(eq(students.institutionId, institutionId));
+    if (query.status) filters.push(eq(students.status, query.status as StudentRow['status']));
+    if (query.gender) filters.push(eq(students.gender, query.gender as StudentRow['gender']));
+
+    if (query.q) {
+      filters.push(this.searchFilter(query.q));
+    }
+
+    // Enrolment-based filters need a subquery rather than a join, so a student with several
+    // historical enrolments is not returned once per enrolment.
+    const enrollmentFilter = this.enrollmentFilter(query);
+    if (enrollmentFilter) filters.push(enrollmentFilter);
+
+    return filters;
+  }
+
+  /**
+   * Every row the caller may see for the given filters, up to `limit`, redacted exactly as
+   * `list` redacts. This is the export path — same scope, same filters, no pagination.
+   */
+  async queryScoped(
+    principal: Principal,
+    query: ListStudentsQuery,
+    limit: number,
+  ): Promise<StudentRow[]> {
+    const scope = this.requireScope(principal);
+
+    return this.db.runInTenant(async (tx) => {
+      const where = and(...this.listFilters(principal, scope, query));
+      const rows = await tx
+        .select()
+        .from(students)
+        .where(where)
+        .orderBy(asc(students.fullNameEn), asc(students.id))
+        .limit(limit);
+      return rows.map((row) => this.redactSensitive(principal, row));
+    });
+  }
+
+  /**
+   * A student's domain status history, scope-filtered exactly like `findOne`: if the caller
+   * cannot fetch the student, the history is a 404 as well.
+   */
+  async statusHistory(principal: Principal, studentId: string): Promise<StatusHistoryRow[]> {
+    const scope = this.requireScope(principal);
+
+    return this.db.runInTenant(async (tx) => {
+      await this.loadVisible(tx, principal, scope, studentId);
+      return tx
+        .select()
+        .from(studentStatusHistory)
+        .where(eq(studentStatusHistory.studentId, studentId))
+        .orderBy(desc(studentStatusHistory.effectiveDate), desc(studentStatusHistory.createdAt));
     });
   }
 
@@ -175,6 +230,35 @@ export class StudentsService {
       return Boolean(found);
     });
     if (!visible) throw new NotFoundError('Student', studentId);
+  }
+
+  /**
+   * Load one student **inside the caller's transaction**, with the scope filter applied.
+   *
+   * The lifecycle services (enrolment, transfer, withdrawal) must check visibility and then
+   * mutate in the *same* transaction — `assertVisible` runs its own transaction, so a check
+   * through it would race a concurrent change. Throws `NotFoundError` for a student outside
+   * the caller's scope, exactly like `findOne`.
+   */
+  async loadVisible(
+    tx: Tx,
+    principal: Principal,
+    scope: DataScope,
+    studentId: string,
+  ): Promise<StudentRow> {
+    const [row] = await tx
+      .select()
+      .from(students)
+      .where(
+        and(
+          eq(students.id, studentId),
+          isNull(students.archivedAt),
+          this.scopeFilter(principal, scope),
+        ),
+      )
+      .limit(1);
+    if (!row) throw new NotFoundError('Student', studentId);
+    return row;
   }
 
   async create(
@@ -380,7 +464,12 @@ export class StudentsService {
   // Scoping
   // ────────────────────────────────────────────────────────────────────────────────────
 
-  private requireScope(principal: Principal): DataScope {
+  /**
+   * Public because the lifecycle services resolve the caller's scope once and then apply it
+   * through `loadVisible` — re-deriving scope per service is how two of them end up applying
+   * different rules to the same student id.
+   */
+  requireScope(principal: Principal): DataScope {
     const context = currentContext();
     const scope = resolveDataScope(principal, SCOPED_RESOURCES.students, {
       institutionId: context?.institutionId ?? null,
@@ -390,6 +479,14 @@ export class StudentsService {
       throw new ForbiddenError('students.view.all', 'You cannot view student records');
     }
     return scope;
+  }
+
+  /**
+   * The scope predicate for the `students` table, exposed for the lifecycle services' own
+   * set-based queries so they cannot grow a second, divergent implementation.
+   */
+  scopeFilterSql(principal: Principal, scope: DataScope): SQL {
+    return this.scopeFilter(principal, scope);
   }
 
   /**
@@ -538,8 +635,13 @@ export class StudentsService {
 
   // ────────────────────────────────────────────────────────────────────────────────────
 
-  private async findLikelyDuplicate(
-    tx: Parameters<Parameters<DatabaseService['runInTenant']>[0]>[0],
+  /**
+   * Public so the CSV import validates candidates through the **same** duplicate logic as
+   * single admission. A second implementation would drift — the first divergence being the
+   * import that admits the duplicate the form would have refused.
+   */
+  async findLikelyDuplicate(
+    tx: Tx,
     institutionId: string,
     candidate: { fullNameEn: string; dateOfBirth: string; birthRegistrationNumber?: string },
   ): Promise<{ id: string; studentCode: string } | null> {
@@ -579,23 +681,42 @@ export class StudentsService {
     return byNameAndDob ?? null;
   }
 
-  private async insertEnrollment(
-    tx: Parameters<Parameters<DatabaseService['runInTenant']>[0]>[0],
+  /**
+   * Insert one active enrolment, enforcing every enrolment invariant in one place:
+   *
+   *  - the section exists, is live, and belongs to the **caller's institution** — a section
+   *    id from another institution of the same tenant is a 404, because RLS cannot catch a
+   *    reference that legitimately belongs to the tenant;
+   *  - the section is in the stated academic year;
+   *  - the student holds no other live enrolment in that year (the partial unique index
+   *    `enrollments_student_year_key` is the backstop if two requests race);
+   *  - the section has a free seat.
+   *
+   * Public because standalone enrolment, promotion, transfer, readmission and import all
+   * create enrolments, and each of them re-implementing capacity checking is how one of them
+   * forgets it. Callers own the surrounding transaction and the status-history row.
+   */
+  async insertEnrollment(
+    tx: Tx,
     input: {
       tenantId: string;
       institutionId: string;
       studentId: string;
       academicYearId: string;
       sectionId: string;
-      rollNumber: string;
-      groupId: string | null;
+      /** Omitted or null: the next free numeric roll in the section is assigned. */
+      rollNumber?: string | null;
+      groupId?: string | null;
       enrolledOn: string;
+      isRepeating?: boolean;
+      promotedFromEnrollmentId?: string | null;
       actorUserId: string;
     },
-  ): Promise<void> {
+  ): Promise<EnrollmentRow> {
     const [section] = await tx
       .select({
         id: sections.id,
+        institutionId: sections.institutionId,
         campusId: sections.campusId,
         classLevelId: sections.classLevelId,
         shiftId: sections.shiftId,
@@ -607,45 +728,109 @@ export class StudentsService {
       .limit(1);
 
     if (!section) throw new NotFoundError('Section', input.sectionId);
+    if (section.institutionId !== input.institutionId) {
+      // A real section — but not this institution's. Saying "wrong institution" would
+      // confirm what the id belongs to; a 404 is indistinguishable from a typo.
+      throw new NotFoundError('Section', input.sectionId);
+    }
     if (section.academicYearId !== input.academicYearId) {
       throw new ValidationError('That section belongs to a different academic year', [
-        { path: 'enrollment.sectionId', message: 'Section is not in the selected academic year' },
+        { path: 'sectionId', message: 'Section is not in the selected academic year' },
       ]);
     }
 
+    const [existing] = await tx
+      .select({ id: enrollments.id, sectionId: enrollments.sectionId })
+      .from(enrollments)
+      .where(
+        and(
+          eq(enrollments.studentId, input.studentId),
+          eq(enrollments.academicYearId, input.academicYearId),
+          sql`${enrollments.status} <> 'cancelled'`,
+          isNull(enrollments.archivedAt),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      throw new ConflictError(
+        'This student is already enrolled in this academic year. Transfer them instead of enrolling them twice.',
+        { existingEnrollmentId: existing.id, sectionId: existing.sectionId },
+      );
+    }
+
     if (section.capacity !== null) {
-      const [occupancy] = await tx
-        .select({ total: sql<number>`count(*)::int` })
-        .from(enrollments)
-        .where(
-          and(
-            eq(enrollments.sectionId, input.sectionId),
-            eq(enrollments.status, 'active'),
-            isNull(enrollments.archivedAt),
-          ),
-        );
-      if ((occupancy?.total ?? 0) >= section.capacity) {
+      const occupied = await this.activeSeatCount(tx, input.sectionId);
+      if (occupied >= section.capacity) {
         throw new ConflictError(
           `That section is full (${section.capacity} students). Choose another section or raise the capacity.`,
         );
       }
     }
 
-    await tx.insert(enrollments).values({
-      tenantId: input.tenantId,
-      institutionId: input.institutionId,
-      campusId: section.campusId,
-      studentId: input.studentId,
-      academicYearId: input.academicYearId,
-      classLevelId: section.classLevelId,
-      sectionId: input.sectionId,
-      shiftId: section.shiftId,
-      groupId: input.groupId,
-      rollNumber: input.rollNumber,
-      status: 'active',
-      enrolledOn: input.enrolledOn,
-      createdBy: input.actorUserId,
-    });
+    const rollNumber = input.rollNumber ?? (await this.nextRollNumber(tx, input.sectionId));
+
+    const [created] = await tx
+      .insert(enrollments)
+      .values({
+        tenantId: input.tenantId,
+        institutionId: input.institutionId,
+        campusId: section.campusId,
+        studentId: input.studentId,
+        academicYearId: input.academicYearId,
+        classLevelId: section.classLevelId,
+        sectionId: input.sectionId,
+        shiftId: section.shiftId,
+        groupId: input.groupId ?? null,
+        rollNumber,
+        status: 'active',
+        enrolledOn: input.enrolledOn,
+        isRepeating: input.isRepeating ?? false,
+        promotedFromEnrollmentId: input.promotedFromEnrollmentId ?? null,
+        createdBy: input.actorUserId,
+      })
+      .returning();
+
+    if (!created) throw new ConflictError('The enrolment could not be created');
+    return created;
+  }
+
+  /** Live occupants of a section: `status = 'active' AND archived_at IS NULL`, and only that. */
+  async activeSeatCount(tx: Tx, sectionId: string): Promise<number> {
+    const [counted] = await tx
+      .select({ total: sql<number>`count(*)::int` })
+      .from(enrollments)
+      .where(
+        and(
+          eq(enrollments.sectionId, sectionId),
+          eq(enrollments.status, 'active'),
+          isNull(enrollments.archivedAt),
+        ),
+      );
+    return counted?.total ?? 0;
+  }
+
+  /**
+   * Next free numeric roll in a section, counting every non-cancelled live enrolment (a
+   * withdrawn student keeps their roll for the year; reissuing it would corrupt registers).
+   * Non-numeric rolls are ignored; the partial unique index is the backstop either way.
+   */
+  async nextRollNumber(tx: Tx, sectionId: string): Promise<string> {
+    const rows = await tx
+      .select({ rollNumber: enrollments.rollNumber })
+      .from(enrollments)
+      .where(
+        and(
+          eq(enrollments.sectionId, sectionId),
+          sql`${enrollments.status} <> 'cancelled'`,
+          isNull(enrollments.archivedAt),
+        ),
+      );
+    let max = 0;
+    for (const row of rows) {
+      const value = /^\d+$/.test(row.rollNumber) ? Number(row.rollNumber) : NaN;
+      if (Number.isFinite(value) && value > max) max = value;
+    }
+    return String(max + 1);
   }
 
   /**
@@ -655,10 +840,7 @@ export class StudentsService {
    * count would start reissuing them. The partial unique index is the real guarantee; this
    * only needs to be right almost always.
    */
-  private async nextStudentCode(
-    tx: Parameters<Parameters<DatabaseService['runInTenant']>[0]>[0],
-    institutionId: string,
-  ): Promise<string> {
+  async nextStudentCode(tx: Tx, institutionId: string): Promise<string> {
     const year = new Date().getUTCFullYear();
     const prefix = `S${year}`;
     const [row] = await tx
@@ -671,10 +853,7 @@ export class StudentsService {
     return `${prefix}${String((Number.isFinite(previous) ? previous : 0) + 1).padStart(5, '0')}`;
   }
 
-  private async nextAdmissionNumber(
-    tx: Parameters<Parameters<DatabaseService['runInTenant']>[0]>[0],
-    institutionId: string,
-  ): Promise<string> {
+  async nextAdmissionNumber(tx: Tx, institutionId: string): Promise<string> {
     const year = new Date().getUTCFullYear();
     const prefix = `A${year}`;
     const [row] = await tx

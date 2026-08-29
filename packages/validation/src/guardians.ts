@@ -117,3 +117,15 @@ export const inviteGuardianSchema = z.object({
   sendSms: z.boolean().default(true),
   locale: z.enum(['en', 'bn']).default('bn'),
 });
+
+/**
+ * Body of `POST /guardians/:id/invite` — the guardian id travels in the path, so the body
+ * carries only delivery preferences. The roles granted on acceptance are fixed server-side
+ * to the tenant's `guardian` system role; there is deliberately no field here that could
+ * name a role.
+ */
+export const guardianPortalInviteSchema = z.object({
+  /** Overrides the email on the guardian record for this invitation only. */
+  email: z.string().trim().toLowerCase().email().max(320).optional(),
+  locale: z.enum(['en', 'bn']).default('bn'),
+});

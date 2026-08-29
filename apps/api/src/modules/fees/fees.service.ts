@@ -231,7 +231,7 @@ interface PreparedLine {
   sortOrder: number;
 }
 
-interface PreparedInvoice {
+export interface PreparedInvoice {
   studentId: string;
   studentName: string;
   feeStructureId: string;
@@ -242,7 +242,7 @@ interface PreparedInvoice {
   lines: PreparedLine[];
 }
 
-interface SkippedStudent {
+export interface SkippedStudent {
   studentId: string;
   studentName: string;
   reason: string;
@@ -253,7 +253,7 @@ interface SkippedStudent {
  * One row of the outstanding-dues report. `sectionId` is null when the report is rolled up to
  * the class, which is why both shapes are declared as one type rather than inferred.
  */
-interface OutstandingDuesRow {
+export interface OutstandingDuesRow {
   classLevelId: string;
   classLevelName: string;
   classOrdinal: number;

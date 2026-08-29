@@ -13,6 +13,7 @@ import { normalizeOffsetPage } from '@shikkha/shared';
 import type { Principal } from '@shikkha/permissions';
 import {
   createGuardianSchema,
+  guardianPortalInviteSchema,
   idParamSchema,
   linkGuardianSchema,
   listGuardiansSchema,
@@ -20,6 +21,7 @@ import {
   uuidSchema,
 } from '@shikkha/validation';
 import { GuardiansService } from './guardians.service';
+import { InvitationsService } from '../auth/invitations.service';
 import { Audited, CurrentUser, RequirePermissions } from '../../common/decorators';
 import { zodBody, zodParam, zodQuery } from '../../common/pipes/zod-validation.pipe';
 import { currentContext } from '../../common/context/request-context';
@@ -27,7 +29,10 @@ import { currentContext } from '../../common/context/request-context';
 @ApiTags('guardians')
 @Controller('guardians')
 export class GuardiansController {
-  constructor(private readonly guardians: GuardiansService) {}
+  constructor(
+    private readonly guardians: GuardiansService,
+    private readonly invitations: InvitationsService,
+  ) {}
 
   /**
    * Declared before `:id`-style routes would be, so `my-children` is never parsed as an id.
@@ -78,6 +83,31 @@ export class GuardiansController {
    * `guardians.update`, because editing a phone number and granting access to a child's
    * medical and financial records are not the same act.
    */
+  /**
+   * Invite a guardian to activate parent-portal access — the Phase 4 gap.
+   *
+   * `guardians.grant_access` rather than `users.invite`, because what is being granted is
+   * portal access to specific children, not a staff account. The roles are fixed
+   * server-side to the tenant's `guardian` system role; the body cannot name one. What the
+   * account can then see is decided per student by `student_guardians.can_access_portal`.
+   */
+  @Post(':id/invite')
+  @RequirePermissions('guardians.grant_access')
+  @Audited({
+    module: 'guardians',
+    resourceType: 'guardian_portal_invitation',
+    action: 'create',
+    resourceIdFrom: 'param:id',
+  })
+  @ApiOperation({ summary: 'Invite a guardian to activate parent portal access' })
+  async invite(
+    @CurrentUser() principal: Principal,
+    @Param(zodParam(idParamSchema)) params: { id: string },
+    @Body(zodBody(guardianPortalInviteSchema)) body: z.infer<typeof guardianPortalInviteSchema>,
+  ) {
+    return this.invitations.inviteGuardian(principal, params.id, body);
+  }
+
   @Post('students/:id/link')
   @RequirePermissions('guardians.link_student')
   @Audited({
