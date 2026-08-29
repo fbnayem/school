@@ -36,7 +36,7 @@ const routingValue = z
   .string()
   .trim()
   .regex(
-    /^(mock|openai|anthropic|gemini)(:[A-Za-z0-9._@\/-]{1,128})?$/,
+    /^(mock|openai|anthropic|gemini)(:[A-Za-z0-9._@/-]{1,128})?$/,
     'Use a provider key, optionally with a model — for example "openai" or "openai:gpt-4o-mini"',
   );
 

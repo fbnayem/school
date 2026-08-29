@@ -149,7 +149,7 @@ export function normalizeText(value: string): string {
     value
       // Strip a UTF-8 BOM: invisible, and it would change the content hash of an otherwise
       // identical document depending on which editor saved it.
-      .replace(/^﻿/, '')
+      .replace(/^\uFEFF/, '')
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n')
       // Collapse runs of blank lines to exactly one. The chunker treats a blank line as a

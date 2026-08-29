@@ -59,6 +59,7 @@ import { AutomationModule } from './modules/automation/automation.module';
 import { AiModule } from './modules/ai/ai.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { AiToolsModule } from './modules/ai-tools/ai-tools.module';
+import { AiGovernanceModule } from './modules/ai-governance/ai-governance.module';
 
 @Module({
   imports: [
@@ -122,6 +123,11 @@ import { AiToolsModule } from './modules/ai-tools/ai-tools.module';
     AiModule,
     KnowledgeModule,
     AiToolsModule,
+    // Registers the global AiAutonomyGuard as well as the attestation endpoints. Without it
+    // the policy in ai-autonomy.policy.ts is a document rather than an enforcement point,
+    // and the two security specs that prove it would be testing a module the running
+    // application never loads.
+    AiGovernanceModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },
