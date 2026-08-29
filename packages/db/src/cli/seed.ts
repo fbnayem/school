@@ -37,6 +37,65 @@ import {
 import { loadRepoEnv } from './load-env';
 
 /**
+ * Delete every row belonging to one tenant, discovering the tables rather than listing them.
+ *
+ * This was a hard-coded list of 33 table names. The schema now has 194 tenant tables, and
+ * every module added after the seeder was written was missing from it — so `--fresh` failed
+ * the moment any of them held a row, with a foreign-key error naming a table the list had
+ * never heard of (`workflow_definitions`, in the case that prompted this). A list of tables
+ * maintained by hand in a seeder is a list that is wrong by the next migration.
+ *
+ * Order is the only hard part, and it is solved by retrying rather than by computing a
+ * topological sort: each pass tries every table still standing, inside a savepoint, and a
+ * foreign-key refusal just means "not yet — something still points here". A pass that deletes
+ * nothing means the remainder is genuinely stuck, which is a bug worth failing loudly on
+ * rather than leaving half a tenant behind. The FK graph is a DAG, so this converges in as
+ * many passes as the graph is deep; self-references are fine because each table is emptied in
+ * one statement.
+ *
+ * Runs as the migrator, which the append-only triggers exempt for exactly this reason:
+ * retention and demo-data pruning.
+ */
+async function purgeTenant(client: Client, tenantId: string): Promise<void> {
+  const { rows } = await client.query<{ table_name: string }>(
+    `select c.relname as table_name
+       from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relkind = 'r'
+        and exists (
+          select 1 from pg_attribute a
+           where a.attrelid = c.oid and a.attname = 'tenant_id' and not a.attisdropped
+        )
+      order by c.relname`,
+  );
+
+  let remaining = rows.map((row) => row.table_name);
+  while (remaining.length > 0) {
+    const stillBlocked: string[] = [];
+    for (const table of remaining) {
+      await client.query('savepoint purge_table');
+      try {
+        await client.query(`delete from "${table}" where tenant_id = $1`, [tenantId]);
+        await client.query('release savepoint purge_table');
+      } catch (error) {
+        await client.query('rollback to savepoint purge_table');
+        if ((error as { code?: string }).code !== '23503') throw error;
+        stillBlocked.push(table);
+      }
+    }
+    if (stillBlocked.length === remaining.length) {
+      throw new Error(
+        `Could not clear the demo tenant: ${stillBlocked.join(', ')} still hold rows that ` +
+          'something else references. A foreign key cycle, or a table referencing this tenant ' +
+          'from a column other than tenant_id.',
+      );
+    }
+    remaining = stillBlocked;
+  }
+}
+
+/**
  * The theory/practical split for a subject's marks.
  *
  * The practical share is rounded and theory takes whatever is left, rather than both being
@@ -139,45 +198,9 @@ async function main(): Promise<void> {
       );
       const tenantId = existing.rows[0]?.id;
       if (tenantId) {
-        for (const table of [
-          'student_status_history',
-          'student_documents',
-          'student_guardians',
-          'enrollments',
-          'guardians',
-          'students',
-          'employee_subject_assignments',
-          'employee_section_assignments',
-          'employees',
-          'departments',
-          'designations',
-          'class_subjects',
-          'sections',
-          'academic_groups',
-          'class_levels',
-          'subjects',
-          'periods',
-          'shifts',
-          'calendar_events',
-          'terms',
-          'academic_years',
-          'rooms',
-          'files',
-          'sessions',
-          'auth_tokens',
-          'user_roles',
-          'roles',
-          'users',
-          'feature_flag_overrides',
-          'subscriptions',
-          'campuses',
-          'institutions',
-        ]) {
-          await client.query(`delete from ${table} where tenant_id = $1`, [tenantId]);
-        }
-        // audit_logs is append-only for the app role but the migrator may prune demo data.
-        await client.query('delete from audit_logs where tenant_id = $1', [tenantId]);
-        await client.query('delete from security_events where tenant_id = $1', [tenantId]);
+        await purgeTenant(client, tenantId);
+        // `organizations` is the tenant root and is keyed by `id`, not `tenant_id`, so it is
+        // not in the discovered set and is removed last, once nothing references it.
         await client.query('delete from organizations where id = $1', [tenantId]);
       }
       await client.query('commit');
