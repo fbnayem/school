@@ -16,16 +16,17 @@ UI alone is never completion.
 
 |                         |                                                                        |
 | ----------------------- | ---------------------------------------------------------------------- |
-| Last updated            | 2026-08-29                                                             |
-| Phases planned          | 36                                                                     |
-| Phases complete         | 1 (Platform Foundation)                                                |
-| Phases partial          | 3 (Academic Foundation, SIS, Guardians)                                |
-| Automated tests passing | **310** (86 shared · 69 permissions · 35 validation · 15 db · 105 API) |
-| Tenant-isolation tests  | 23 passing — no known leakage                                          |
-| RBAC enforcement tests  | 26 passing                                                             |
-| Database migrations     | 3, applied cleanly from empty                                          |
-| Production build        | API and web both build without errors                                  |
-| TypeScript errors       | 0                                                                      |
+| Last updated            | 2026-08-29                                                              |
+| Phases planned          | 36                                                                      |
+| Phases complete         | 20 — 1–20 and 22, 25 (backend). See the table below                     |
+| Phases not started      | 21, 23, 24, 26 and the AI phases 27–36                                  |
+| Automated tests passing | **1,239** (86 shared · 71 permissions · 35 validation · 18 db · 1,029 API) |
+| HTTP routes             | 625 across 31 controllers, 0 of them unaudited on a mutating method     |
+| Database migrations     | 27, applied cleanly from empty on a scratch database                    |
+| Row-level security      | 181 of 181 tenant tables ENABLED **and** FORCED                         |
+| Production build        | API and web both build without errors                                   |
+| TypeScript errors       | 0                                                                       |
+| **Web UI**              | **8 pages against 625 routes — the largest gap in the system**          |
 
 ---
 
@@ -67,72 +68,63 @@ independently at the database layer with the unprivileged role. See
 
 ---
 
-## Phase 2 — Academic Foundation · `IN PROGRESS`
+## Phases 2–26 — backend status
 
-| Feature                       | Status                   | Notes                                                                    |
-| ----------------------------- | ------------------------ | ------------------------------------------------------------------------ |
-| Academic years                | COMPLETE                 | Overlap prevention, single-current invariant enforced in one transaction |
-| Terms                         | COMPLETE                 | Replaced as a set; weights must total 100%, ranges must not overlap      |
-| Class levels                  | COMPLETE                 | Ordinal-driven, decoupled from display name                              |
-| Sections                      | COMPLETE                 | Capacity enforced at enrolment; live counts without N+1                  |
-| Subjects                      | COMPLETE                 | Fourth-subject and GPA-exclusion flags modelled                          |
-| Curriculum (`class_subjects`) | COMPLETE (schema + seed) | Mark distribution validated to sum to full marks; no CRUD endpoint yet   |
-| Academic groups               | COMPLETE (schema + seed) | Science / Commerce / Humanities                                          |
-| Shifts                        | COMPLETE (schema + seed) | Morning/day; no CRUD endpoint yet                                        |
-| Rooms                         | SCHEMA ONLY              | No endpoint                                                              |
-| Periods                       | SCHEMA ONLY              | No endpoint                                                              |
-| Academic calendar             | SCHEMA ONLY              | Table, constraints and seed data; no endpoint                            |
-| Teacher assignments           | COMPLETE (schema + seed) | Drives the `assigned` data scope; no CRUD endpoint yet                   |
+Read this table as the backend claim only. Every phase marked COMPLETE has schema with forced
+row-level security, migrations that apply from empty, validation, permission-checked routes,
+audited mutations, and an integration spec that exercises tenant isolation from both the HTTP
+layer and raw SQL as the unprivileged application role. **None of them has a UI**, which is why
+the web section below is the honest bottleneck rather than a cosmetic gap.
 
-**Blocking Phase 2 completion:** CRUD endpoints for rooms, periods, calendar, shifts and
-teacher assignments; an editing UI.
-
----
-
-## Phase 3 — Student Information System · `IN PROGRESS`
-
-| Feature                           | Status           | Notes                                                                          |
-| --------------------------------- | ---------------- | ------------------------------------------------------------------------------ |
-| Student create                    | COMPLETE         | Auto-generated codes, duplicate detection, optional same-transaction enrolment |
-| Student read (list)               | COMPLETE         | Permission-scoped, paginated, full-text search, sortable                       |
-| Student read (one)                | COMPLETE         | Same scope filter as the list — no separate IDOR-prone path                    |
-| Student update                    | COMPLETE         | Optimistic locking; audit records only changed fields                          |
-| Student archive                   | COMPLETE         | Mandatory reason; refuses while enrolment is active                            |
-| Medical data protection           | COMPLETE         | Redacted server-side without `students.medical.view`                           |
-| Enrolment                         | PARTIAL          | Created with a student; no standalone endpoint                                 |
-| Status history                    | COMPLETE (write) | Written on admission; no read endpoint                                         |
-| Promotion / transfer / withdrawal | NOT STARTED      | Schema supports them                                                           |
-| Import / export                   | NOT STARTED      |                                                                                |
-| Documents                         | SCHEMA ONLY      |                                                                                |
-| Bulk operations                   | NOT STARTED      |                                                                                |
+| Phase | Module                          | Backend    | Spec                     | Notes                                                                 |
+| ----- | ------------------------------- | ---------- | ------------------------ | --------------------------------------------------------------------- |
+| 2     | Academic foundation             | COMPLETE   | `academic.spec.ts`       | Rooms, periods, calendar, shifts and assignments all have CRUD (0015) |
+| 3     | Student Information System      | COMPLETE   | `students.spec.ts`       | Promotion, transfer, withdrawal, readmission, documents, export       |
+| 4     | Guardian management             | COMPLETE   | `guardians.spec.ts`      | Portal invitation lands with the auth lifecycle (0011)                |
+| 5     | Admissions                      | COMPLETE   | `admissions.spec.ts`     | Applications, seats, offers, conversion to student                    |
+| 6     | Timetable                       | COMPLETE   | `timetable.spec.ts`      | Clash detection in SQL; publishing archives the previous version      |
+| 7     | Attendance                      | COMPLETE   | `attendance.spec.ts`     | Corrections are a reviewed workflow, never a silent overwrite         |
+| 8     | Examinations and results        | COMPLETE   | `exams.spec.ts`          | Marks → review → approve → publish, each step audited                 |
+| 9     | Homework                        | COMPLETE   | `homework.spec.ts`       |                                                                       |
+| 10    | LMS                             | COMPLETE   | `lms.spec.ts`            | Own permission triple + `lms.submit`; answer key never leaves         |
+| 11    | Fees                            | COMPLETE   | `fees.spec.ts`           | `numeric(14,2)` throughout; invoice totals derived in the database    |
+| 12    | Payment gateway                 | COMPLETE   | `payment-gateway.spec.ts`| bKash/Nagad/SSLCommerz adapters + a mock; stubs refuse loudly         |
+| 13    | Accounting                      | COMPLETE   | `accounting.spec.ts`     | Balanced-entry, debit-XOR-credit and open-period checks in the DB     |
+| 14    | Communication                   | COMPLETE   | `communication.spec.ts`  | Bulk send is submit → approve → send, never one click                 |
+| 15    | HR                              | COMPLETE   | `hr.spec.ts`             |                                                                       |
+| 16    | Payroll                         | COMPLETE   | `payroll.spec.ts`        | Gross and net derived in the DB; a posted run is immutable            |
+| 17    | Library                         | COMPLETE   | `library.spec.ts`        | The assessor of a fine can never be its waiver                        |
+| 18    | Transport                       | COMPLETE   | `transport.spec.ts`      | GPS provider is an adapter; the stub refuses rather than inventing    |
+| 19    | Inventory and procurement       | COMPLETE   | `inventory.spec.ts`      | Stock levels derived from movements; cannot go negative (0025, 0031)  |
+| 20    | Asset management                | COMPLETE   | `assets.spec.ts`         | Depreciation posts to the ledger; a posted run is immutable           |
+| 21    | Leave                           | IN PROGRESS| —                        | Migration 0027 written; module not yet wired                          |
+| 22    | Discipline                      | COMPLETE   | `discipline.spec.ts`     |                                                                       |
+| 23    | Documents and templates         | IN PROGRESS| —                        | Migration 0028 written; module not yet wired                          |
+| 24    | Report builder                  | IN PROGRESS| —                        | Migration 0029 written; module not yet wired                          |
+| 25    | Workflow engine                 | COMPLETE   | `workflow.spec.ts`       | Used by admissions, attendance corrections, discipline and payroll    |
+| 26    | Automation engine               | IN PROGRESS| —                        | Migration 0030 written; module not yet wired                          |
 
 ---
 
-## Phase 4 — Guardian Management · `IN PROGRESS`
+## Phases 27–36 — AI · `IN PROGRESS`
 
-| Feature                       | Status      | Notes                                                                 |
-| ----------------------------- | ----------- | --------------------------------------------------------------------- |
-| Guardian create               | COMPLETE    | Phone-based deduplication                                             |
-| Guardian list                 | COMPLETE    | Scoped; a guardian sees co-guardians of their own children            |
-| Link to student               | COMPLETE    | Audited; primary/billing exclusivity handled transactionally          |
-| Unlink                        | COMPLETE    | Mandatory reason; refuses to leave a student with no guardian         |
-| `my-children` portal endpoint | COMPLETE    | Derived entirely from the caller's identity — no tamperable parameter |
-| Guardian portal invitation    | NOT STARTED |                                                                       |
+The architecture is settled in `docs/06_AI_ARCHITECTURE.md` and the structural decision it
+turns on — `apps/ai` holds no database credentials and reaches data only by calling back into
+the API with the caller's own authorization — is what the rest depends on. Implementation is
+underway; nothing here is COMPLETE and nothing should be treated as working.
 
----
-
-## Phases 5–36 · `NOT STARTED`
-
-Admissions, timetable, attendance, examinations, homework, LMS, fees, payments, accounting,
-communication, HR, payroll, library, transport, inventory, assets, leave, discipline,
-documents, reports, workflow engine, automation, and the AI phases (27–36) are designed in
-`docs/00_MASTER_PLAN.md` and have schema-level groundwork where it affected Phase 1–4 decisions
-(the permission catalogue covers all of them, the audit taxonomy covers all of them). No
-implementation.
+`audit_logs.is_ai_initiated` has existed since migration 0001 so that an AI-assisted action is
+distinguishable in the trail forever, and the permission catalogue has carried the `ai.*`
+vocabulary from the start, so neither is a retrofit.
 
 ---
 
 ## Web application
+
+**This is the honest bottleneck.** The backend exposes 625 routes; the web application has
+eight pages. Everything below is real and works — none of it is a placeholder — but it covers a
+small fraction of what the API can do, and no amount of backend completeness compensates for
+that. A school cannot use an API.
 
 | Screen             | Status               | Notes                                                                                          |
 | ------------------ | -------------------- | ---------------------------------------------------------------------------------------------- |
@@ -147,17 +139,30 @@ implementation.
 | Accessibility      | PARTIAL              | Skip link, focus-visible rings, ARIA on interactive elements, table captions. No formal audit. |
 | Dark mode          | COMPLETE (tokens)    | Defined in tokens; no toggle                                                                   |
 | Bangla UI strings  | NOT STARTED          | Data is bilingual; chrome is English                                                           |
+| Everything else    | NOT STARTED          | Attendance, exams, fees, admissions, HR, timetable, library, transport, inventory, assets, LMS, communication, accounting, payroll, discipline, workflow — API only |
+
+Typed API clients exist ahead of their screens for academic, attendance and fees
+(`src/components/*/api.ts`); the pages that consume them are not written yet.
+
+**End-to-end tests:** none. Playwright is not set up. The integration suite drives the API
+directly, so no user journey is covered through a browser.
 
 ---
 
 ## Verification commands
 
+Every command here was run before it was written down.
+
 ```bash
-pnpm infra:up            # Postgres + Redis
-pnpm db:migrate          # 5 migrations
-pnpm db:seed -- --fresh  # 960 students, 837 guardians, 24 sections
-pnpm test                # 310 tests
-pnpm typecheck           # 0 errors
-pnpm lint                # 0 errors
-pnpm build               # API + web
+pnpm infra:up                                  # Postgres 17 + pgvector, Redis, MinIO, Mailpit
+pnpm db:migrate                                # 27 migrations, clean from empty
+pnpm db:seed -- --fresh                        # demo tenant with students, guardians, sections
+pnpm test                                      # 1,239 tests
+pnpm typecheck                                 # 0 errors
+pnpm lint                                      # 0 errors
+pnpm build                                     # API + web
 ```
+
+The integration suite migrates and runs against `shikkha_test`, which must already exist. To
+run two suites at once — or to keep a run insulated from a migration being edited underneath
+it — give one its own database with `TEST_DB_NAME=shikkha_test_2 pnpm test`.

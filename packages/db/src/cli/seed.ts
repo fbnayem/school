@@ -36,6 +36,25 @@ import {
 } from '../seed/demo-data';
 import { loadRepoEnv } from './load-env';
 
+/**
+ * The theory/practical split for a subject's marks.
+ *
+ * The practical share is rounded and theory takes whatever is left, rather than both being
+ * rounded independently. Rounding both gave 38 + 13 = 51 for a 50-mark subject, which
+ * `class_subjects_mark_distribution_sums` (migration 0015) rejects — so `pnpm db:seed --fresh`
+ * failed outright on a clean database, on the very command the README documents first.
+ * Deriving one component from the other makes the sum exact for every value of `fullMarks`,
+ * not only the ones that happen to divide evenly.
+ */
+export function markDistribution(
+  fullMarks: number,
+  hasPractical: boolean,
+): Record<string, number> {
+  if (!hasPractical) return { theory: fullMarks };
+  const practical = Math.round(fullMarks * 0.25);
+  return { theory: fullMarks - practical, practical };
+}
+
 loadRepoEnv();
 
 const DEMO_TENANT_SLUG = 'dhaka-future-academy';
@@ -438,14 +457,7 @@ async function main(): Promise<void> {
           subject.periodsPerWeek,
           subject.fullMarks,
           subject.passMarks,
-          JSON.stringify(
-            subject.hasPractical
-              ? {
-                  theory: Math.round(subject.fullMarks * 0.75),
-                  practical: Math.round(subject.fullMarks * 0.25),
-                }
-              : { theory: subject.fullMarks },
-          ),
+          JSON.stringify(markDistribution(subject.fullMarks, subject.hasPractical)),
           subject.kind === 'optional',
         ]);
       }

@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import { getTableConfig, PgTable } from 'drizzle-orm/pg-core';
 import * as schema from '../src/schema';
+import { markDistribution } from '../src/cli/seed';
 
 /**
  * Tables that legitimately have no `tenant_id`.
@@ -261,5 +262,43 @@ describe('timestamps', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * The demo seeder writes `class_subjects.mark_distribution`, and migration 0015 constrains
+ * its components to total `full_marks` exactly. Those two were out of step: the seeder
+ * rounded theory and practical independently, so a 50-mark practical subject produced
+ * 38 + 13 = 51 and `pnpm db:seed --fresh` failed on a clean database — the command the
+ * README lists first. This is the arithmetic, tested where a database is not needed.
+ */
+describe('seed mark distribution', () => {
+  const FULL_MARKS = [10, 20, 25, 30, 33, 40, 50, 66, 75, 100, 101, 150];
+
+  it('always totals full marks when there is a practical component', () => {
+    for (const fullMarks of FULL_MARKS) {
+      const distribution = markDistribution(fullMarks, true);
+      const total = Object.values(distribution).reduce((sum, part) => sum + part, 0);
+      expect(total, `full marks ${fullMarks}`).toBe(fullMarks);
+    }
+  });
+
+  it('gives a theory-only subject the whole allocation', () => {
+    for (const fullMarks of FULL_MARKS) {
+      expect(markDistribution(fullMarks, false)).toEqual({ theory: fullMarks });
+    }
+  });
+
+  it('splits roughly three to one, and never negatively', () => {
+    for (const fullMarks of FULL_MARKS) {
+      const { theory, practical } = markDistribution(fullMarks, true) as {
+        theory: number;
+        practical: number;
+      };
+      expect(practical).toBeGreaterThan(0);
+      expect(theory).toBeGreaterThan(practical);
+      // The practical share is within half a mark of a quarter — the rounding, and nothing more.
+      expect(Math.abs(practical - fullMarks / 4)).toBeLessThanOrEqual(0.5);
+    }
   });
 });
