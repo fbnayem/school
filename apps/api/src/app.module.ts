@@ -48,6 +48,10 @@ import { AccountingModule } from './modules/accounting/accounting.module';
 import { LibraryModule } from './modules/library/library.module';
 import { PayrollModule } from './modules/payroll/payroll.module';
 import { TransportModule } from './modules/transport/transport.module';
+import { LmsModule } from './modules/lms/lms.module';
+import { CommunicationModule } from './modules/communication/communication.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
+import { AssetsModule } from './modules/assets/assets.module';
 
 @Module({
   imports: [
@@ -100,6 +104,10 @@ import { TransportModule } from './modules/transport/transport.module';
     LibraryModule,
     PayrollModule,
     TransportModule,
+    LmsModule,
+    CommunicationModule,
+    InventoryModule,
+    AssetsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

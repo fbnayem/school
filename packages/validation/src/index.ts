@@ -20,3 +20,4 @@ export * from './communication';
 export * from './payroll';
 export * from './transport';
 export * from './inventory';
+export * from './assets';
