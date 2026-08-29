@@ -22,7 +22,16 @@ import { resolve } from 'node:path';
 import { AppModule } from '../../src/app.module';
 import { resetEnvCache } from '../../src/config/env';
 
-const TEST_DB = 'shikkha_test';
+/**
+ * The database the suite migrates and runs against.
+ *
+ * Overridable so two runs can be in flight at once against separate databases — which
+ * matters because the harness migrates from the live `packages/db/migrations` directory, so
+ * a migration being edited by anyone else mid-run aborts the whole suite with a checksum
+ * mismatch. `TEST_DB_NAME=shikkha_test_2 pnpm test` gives a run its own copy. The database
+ * must already exist; the harness migrates it but does not create it.
+ */
+const TEST_DB = process.env.TEST_DB_NAME ?? 'shikkha_test';
 const HOST = process.env.TEST_DB_HOST ?? 'localhost';
 const PORT = process.env.TEST_DB_PORT ?? '5433';
 const PASSWORD = process.env.TEST_DB_PASSWORD ?? 'shikkha_dev_password';

@@ -7,11 +7,16 @@
  *
  * The permission split, using the LMS catalogue entries:
  *
- *   lms.view           — read, within the caller's row scope (staff see all/assigned
- *                        classes' courses; students and guardians see enrolled + published).
- *                        Also the student actions — recording progress, sitting a quiz —
- *                        because the catalogue has no `lms.submit`; the service pins those
- *                        paths to the caller's own student identity and fails closed.
+ *   lms.view           — read at all. Which rows follow from `lms.view.{all,assigned,own}`,
+ *                        resolved once per request in `LmsService.requireScope` (staff see
+ *                        all or their assigned classes' courses; students and guardians see
+ *                        enrolled + published).
+ *   lms.submit         — the learner's own actions: recording progress, starting a quiz
+ *                        attempt, submitting one. Separate from `lms.view` because those
+ *                        are writes, and a read permission should not carry them. The
+ *                        service additionally pins every one to the caller's own student
+ *                        identity and fails closed, so the permission is the outer gate
+ *                        rather than the only one. Guardians deliberately do not hold it.
  *   lms.manage         — author: courses, structure, resources, enrolment, quizzes, grading
  *   lms.publish        — the lifecycle switch: publish and withdraw courses and quizzes
  *   lms.progress.view  — rosters, attempt lists, the gradebook and completion report —
@@ -350,7 +355,7 @@ export class LmsController {
    * derived fact a client might try to state.
    */
   @Post('lessons/:id/progress')
-  @RequirePermissions('lms.view')
+  @RequirePermissions('lms.submit')
   @Audited({
     module: 'lms',
     resourceType: 'lesson_progress',
@@ -465,7 +470,7 @@ export class LmsController {
    * limit. The questions returned carry no `isCorrect`, structurally.
    */
   @Post('quizzes/:id/attempts')
-  @RequirePermissions('lms.view')
+  @RequirePermissions('lms.submit')
   @Audited({
     module: 'lms',
     resourceType: 'quiz_attempt',
@@ -504,7 +509,7 @@ export class LmsController {
    * submitted attempt is immutable.
    */
   @Post('attempts/:id/submit')
-  @RequirePermissions('lms.view')
+  @RequirePermissions('lms.submit')
   @Audited({
     module: 'lms',
     resourceType: 'quiz_attempt',

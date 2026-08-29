@@ -182,16 +182,15 @@ export class LmsService {
   /**
    * Resolve the caller's row scope once per request.
    *
-   * The LMS has no scoped-view permission triple of its own (`lms.view` is a single
-   * permission every audience holds), so the scope rides on the student triple exactly as
-   * the homework module's does: who may see all students may see all courses, who may see
-   * assigned students sees their classes' courses, and a student or guardian sees their
-   * own. When `lms.view.{all,assigned,own}` are added to the catalogue, only this method
-   * changes.
+   * This used to ride on `students.view.{all,assigned,own}` because the LMS had no triple of
+   * its own. That coupling was wrong in a way that would not have shown up as a bug: a role
+   * granted access to student records inherited visibility of every course with it, so
+   * widening one permission silently widened the other. `lms.view.{all,assigned,own}` now
+   * exists and is what this resolves against.
    */
   requireScope(principal: Principal): DataScope {
     const context = currentContext();
-    const scope = resolveDataScope(principal, SCOPED_RESOURCES.students, {
+    const scope = resolveDataScope(principal, SCOPED_RESOURCES.lms, {
       institutionId: context?.institutionId ?? null,
       campusId: context?.campusId ?? null,
     });

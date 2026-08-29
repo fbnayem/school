@@ -241,6 +241,11 @@ export const SCOPED_RESOURCES = {
     assigned: 'results.view.assigned',
     own: 'results.view.own',
   },
+  lms: {
+    all: 'lms.view.all',
+    assigned: 'lms.view.assigned',
+    own: 'lms.view.own',
+  },
   payslips: { all: 'payroll.payslips.view.all', own: 'payroll.payslips.view.own' },
   leaveRequests: { all: 'leave.requests.view.all', own: 'leave.requests.view.own' },
 } as const satisfies Record<string, ScopedResourcePermissions>;

@@ -626,10 +626,26 @@ describe('LMS', () => {
       expect(relapse.body.status).toBe('completed');
     });
 
-    it('refuses progress from a non-student principal', async () => {
+    /**
+     * Two independent refusals, and the test says which is which.
+     *
+     * A guardian holds `lms.view` and `lms.view.own` — they can read their child's course —
+     * but deliberately not `lms.submit`, so the guard stops them at the door. The service's
+     * own check, that the caller must be the student whose progress this is, sits behind it
+     * and would refuse too. Asserting the read succeeds alongside the write failing is what
+     * makes this a test of the separation rather than of a blanket denial.
+     */
+    it('lets a guardian read the lesson but refuses progress: no lms.submit', async () => {
+      const read = await get('guardian1', `/api/v1/lms/lessons/${lesson1Id}`);
+      expect(read.status, JSON.stringify(read.body)).toBe(200);
+
       const response = await post('guardian1', `/api/v1/lms/lessons/${lesson1Id}/progress`, {
         secondsSpent: 10,
       });
+      // The 403 body deliberately does not name the permission — ForbiddenError keeps that
+      // in `context` for the log, because telling a caller which permission would have let
+      // them through is a map of the authorization model. The role-level assertion lives in
+      // packages/permissions/test/rbac-matrix.spec.ts; here the pair is the proof.
       expect(response.status).toBe(403);
     });
 
@@ -763,6 +779,24 @@ describe('LMS', () => {
     it('refuses a second start while an attempt is open', async () => {
       const response = await post('student1', `/api/v1/lms/quizzes/${quiz1Id}/attempts`);
       expect(response.status).toBe(409);
+    });
+
+    /**
+     * A guardian can see the quiz — they hold `lms.view` and `lms.view.own` — but sitting it
+     * is `lms.submit`, which they do not hold. That separation is the whole reason the
+     * permission exists: before it, every student action rode on the read permission, and a
+     * guardian's read of their child's coursework carried the right to answer it.
+     */
+    it('refuses an attempt from a guardian: reading a quiz is not sitting it', async () => {
+      const read = await get('guardian1', `/api/v1/lms/quizzes/${quiz1Id}`);
+      expect(read.status, JSON.stringify(read.body)).toBe(200);
+
+      const response = await post('guardian1', `/api/v1/lms/quizzes/${quiz1Id}/attempts`);
+      // The 403 body deliberately does not name the permission — ForbiddenError keeps that
+      // in `context` for the log, because telling a caller which permission would have let
+      // them through is a map of the authorization model. The role-level assertion lives in
+      // packages/permissions/test/rbac-matrix.spec.ts; here the pair is the proof.
+      expect(response.status).toBe(403);
     });
 
     it('auto-grades mcq_single, mcq_multi and true_false; queues short_text', async () => {

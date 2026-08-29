@@ -159,7 +159,24 @@ export const PERMISSION_CATALOG = {
     'homework.grade',
     'homework.submit',
   ],
-  lms: ['lms.view', 'lms.manage', 'lms.publish', 'lms.progress.view'],
+  lms: [
+    // `lms.view` is the flat "may see learning content at all" gate every audience holds.
+    // Which courses they then see is a row-scope question, and the triple below answers it:
+    // the module previously borrowed `students.view.{all,assigned,own}`, which meant a role
+    // could be given access to student records and silently inherit course visibility with it.
+    'lms.view',
+    'lms.view.all',
+    'lms.view.assigned',
+    'lms.view.own',
+    'lms.manage',
+    'lms.publish',
+    'lms.progress.view',
+    // Starting an attempt, submitting one, and marking a lesson complete are the learner's
+    // own actions. They rode on `lms.view` because no string existed for them, which made a
+    // read permission carry a write. The service still pins every one of these to the
+    // caller's own student identity, but the permission now says what it is.
+    'lms.submit',
+  ],
 
   // ── Fees and payments ─────────────────────────────────────────────────────────────
   fee: [

@@ -163,6 +163,19 @@ describe('a guardian cannot', () => {
     expect(guardian.has('homework.grade')).toBe(false);
     expect(guardian.has('homework.submit')).toBe(false);
   });
+
+  it('do their child’s coursework — reading it is not sitting it', () => {
+    // The guardian sees their children's courses and quizzes...
+    expect(guardian.has('lms.view')).toBe(true);
+    expect(guardian.has('lms.view.own')).toBe(true);
+    // ...and cannot start an attempt, submit one, or mark a lesson complete. Before
+    // `lms.submit` existed those actions rode on `lms.view`, so this grant carried them.
+    expect(guardian.has('lms.submit')).toBe(false);
+    expect(guardian.has('lms.view.all')).toBe(false);
+    expect(guardian.has('lms.view.assigned')).toBe(false);
+    expect(guardian.has('lms.manage')).toBe(false);
+    expect(guardian.has('lms.progress.view')).toBe(false);
+  });
 });
 
 describe('an accountant cannot', () => {
@@ -213,6 +226,18 @@ describe('a student cannot', () => {
     expect(student.has('students.view.assigned')).toBe(false);
     expect(student.has('students.view.own')).toBe(true);
     expect(student.has('results.view.all')).toBe(false);
+  });
+
+  it('see or author anyone’s coursework but sits their own', () => {
+    // The one role that holds `lms.submit`: the learner doing the work.
+    expect(student.has('lms.submit')).toBe(true);
+    expect(student.has('lms.view.own')).toBe(true);
+    expect(student.has('lms.view.all')).toBe(false);
+    expect(student.has('lms.view.assigned')).toBe(false);
+    // Authoring and the rosters that name every classmate stay staff-only.
+    expect(student.has('lms.manage')).toBe(false);
+    expect(student.has('lms.publish')).toBe(false);
+    expect(student.has('lms.progress.view')).toBe(false);
   });
 
   it('reach finance beyond their own account', () => {
