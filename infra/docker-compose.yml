@@ -82,6 +82,60 @@ services:
     environment:
       MP_MAX_MESSAGES: 500
 
+  # The AI gateway (apps/ai). Prompt assembly, provider routing and the tool-call loop.
+  #
+  # ───────────────────────────────────────────────────────────────────────────────────────────
+  # READ THIS BEFORE "FIXING" THE MISSING DATABASE WIRING BELOW.
+  #
+  # This service has **no database environment variable and no `depends_on: postgres`**, and
+  # that omission is the security property, not an oversight. `apps/ai` reaches institutional
+  # data only by calling back into `apps/api` with the caller's own bearer token, so every read
+  # and write is re-authorized against that person's permissions (docs/06 §1, docs/07 §1).
+  #
+  # "The AI must not bypass permissions" as a policy is something a prompt injection can talk
+  # its way around. As a missing connection string, it is not. The container refuses to start
+  # if one is present, so adding `DATABASE_URL` here does not grant access — it breaks the boot.
+  #
+  # It also has no `env_file`. A shared env file is precisely how the API's credentials end up
+  # in this container by accident.
+  # ───────────────────────────────────────────────────────────────────────────────────────────
+  ai:
+    build:
+      context: ../apps/ai
+      dockerfile: Dockerfile
+    container_name: shikkha-ai
+    restart: unless-stopped
+    ports:
+      - '8001:8000'
+    environment:
+      AI_ENVIRONMENT: development
+      AI_LOG_LEVEL: info
+      # host.docker.internal reaches apps/api running on the developer's machine; point this at
+      # a service name instead once the API itself is containerised here.
+      AI_API_BASE_URL: http://host.docker.internal:4000
+      AI_API_PREFIX: api/v1
+      # The mock provider needs no credentials and is deterministic, so `docker compose up`
+      # produces a working gateway with nothing configured. It is refused in production.
+      AI_PROVIDER: mock
+      AI_MAX_TOOL_ITERATIONS: 6
+      AI_MAX_WALL_CLOCK_SECONDS: 45
+      AI_CORS_ORIGINS: http://localhost:3000
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    healthcheck:
+      # Liveness only. A readiness check here would restart the gateway during a brief API blip.
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).status == 200 else 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
 volumes:
   postgres-data:
   redis-data:

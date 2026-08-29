@@ -56,6 +56,9 @@ import { LeaveModule } from './modules/leave/leave.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AutomationModule } from './modules/automation/automation.module';
+import { AiModule } from './modules/ai/ai.module';
+import { KnowledgeModule } from './modules/knowledge/knowledge.module';
+import { AiToolsModule } from './modules/ai-tools/ai-tools.module';
 
 @Module({
   imports: [
@@ -116,6 +119,9 @@ import { AutomationModule } from './modules/automation/automation.module';
     DocumentsModule,
     ReportsModule,
     AutomationModule,
+    AiModule,
+    KnowledgeModule,
+    AiToolsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },

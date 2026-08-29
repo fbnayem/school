@@ -1,0 +1,28 @@
+# Python build and tool artefacts. The root .gitignore is written for the Node workspaces and
+# does not cover these, so they are ignored here rather than by editing a file this app does
+# not own.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# The real environment file. `.env.example` is committed; this one holds provider keys.
+.env
+.env.*
+!.env.example
+
+# apps/ai is a Python service; its virtualenv and bytecode caches are local build artefacts.
+apps/ai/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/

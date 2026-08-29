@@ -1,0 +1,103 @@
+# apps/ai — the AI gateway.
+#
+# READ THIS BEFORE ADDING A DEPENDENCY.
+#
+# This service is given **no database credentials**, by construction (docs/06 §1,
+# docs/07 §1). It reaches institutional data only by calling back into `apps/api` with the
+# caller's own bearer token, so every read and write is re-authorized by the trusted service
+# against the caller's permissions.
+#
+# That property is enforced here, in the dependency list: there is no PostgreSQL driver, no
+# ORM and no cache client anywhere in the resolved set, and `tests/test_no_database_driver.py`
+# fails the build if one ever appears. "The AI must not bypass permissions" as a policy is
+# something a prompt injection can talk its way around; as a missing driver and a missing
+# connection string, it is not.
+#
+# The vendor SDKs (`openai`, `anthropic`, `google-genai`) are deliberately absent for the same
+# reason: each drags in a transitive tree nobody audits, and the whole point of this file is
+# that its resolved set is small enough to read. The provider adapters speak the vendors' HTTP
+# APIs directly over httpx, which is already required for the callback client.
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shikkha-ai"
+version = "0.1.0"
+description = "Shikkha AI gateway — prompt assembly, provider routing and delegated tool calls"
+readme = "README.md"
+# 3.12 is the deployed runtime (see Dockerfile). The floor is not raised further so the suite
+# also runs on a developer's newer interpreter.
+requires-python = ">=3.12"
+
+# Pinned exactly. An unpinned range means the resolved set — the thing the no-driver test
+# audits — can change without a commit.
+dependencies = [
+  "fastapi==0.141.1",
+  "starlette==1.6.0",
+  "uvicorn==0.52.4",
+  "httpx==0.28.1",
+  "pydantic==2.13.5",
+  "pydantic-settings==2.15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "ruff==0.16.5",
+  "mypy==2.3.1",
+]
+
+[tool.setuptools]
+packages = ["app", "app.providers", "app.routers"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Every test in this suite that touches the event loop is an `async def`; opting in per test
+# with a marker is a step that gets forgotten, and a forgotten marker makes an async test
+# silently pass without running.
+asyncio_mode = "auto"
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W",    # pycodestyle + pyflakes
+  "I",              # import order
+  "UP",             # pyupgrade
+  "B",              # bugbear
+  "S",              # flake8-bandit — this service handles other people's children's data
+  "ASYNC",          # blocking calls in async code
+  "RUF",
+]
+ignore = [
+  # Asserts are used in tests as assertions, which is what they are for.
+  "S101",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately hard-code fake secrets and call private helpers.
+"tests/*" = ["S105", "S106", "S311"]
+# The canned vendor SSE frames in this file are one physical line each because that is what the
+# protocol produces. Re-wrapping them to satisfy a line-length rule would test something the
+# adapters never receive.
+"tests/test_providers.py" = ["S105", "S106", "S311", "E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+disallow_any_unimported = true
+# The whole service is one package; there is no untyped legacy corner to exempt.
+files = ["app", "tests"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+# Test functions return None and take fixtures; requiring annotations on every one of them
+# adds noise without catching anything.
+disallow_untyped_defs = false

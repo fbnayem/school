@@ -384,6 +384,11 @@ export const SYSTEM_ROLES: readonly SystemRoleDefinition[] = [
       'reports.view',
       'reports.export',
       'workflows.act',
+      // The accounts manager already had this and the accountant did not, which left the
+      // `finance.outstanding` AI tool unreachable by the role it exists for: the tool is
+      // guarded by `finance.reports.view`, but the invocation route needs one of the `ai.*`
+      // use permissions, and holding neither meant a 403 before the tool's own check ran.
+      'ai.copilot.use',
     ],
   },
   {

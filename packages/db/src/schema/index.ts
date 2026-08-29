@@ -36,3 +36,5 @@ export * from './leave';
 export * from './documents';
 export * from './reports';
 export * from './automation';
+export * from './ai';
+export * from './knowledge';
