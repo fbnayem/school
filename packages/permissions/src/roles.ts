@@ -179,6 +179,12 @@ export const SYSTEM_ROLES: readonly SystemRoleDefinition[] = [
       'ai.copilot.use',
       'ai.principal_insights.view',
       'ai.teacher_tools.use',
+      // The principal owns the operational budget, so they set the AI ceiling and see the
+      // spend against it. Choosing the vendor stays with the owner (`ai.settings.manage`),
+      // and reading staff transcripts (`ai.conversations.view.all`) is granted to nobody by
+      // default — a school that wants that has to decide to.
+      'ai.usage.view',
+      'ai.budgets.manage',
     ],
   },
   {
@@ -433,6 +439,9 @@ export const SYSTEM_ROLES: readonly SystemRoleDefinition[] = [
       'audit.view',
       'workflows.act',
       'ai.copilot.use',
+      // Inference is a cost line, and the person who answers for the budget should be able to
+      // see the spend without being able to raise the ceiling they are held to.
+      'ai.usage.view',
     ],
   },
   {

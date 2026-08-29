@@ -336,6 +336,17 @@ export const PERMISSION_CATALOG = {
     'ai.knowledge_base.manage',
     'ai.settings.manage',
     'ai.usage.view',
+    // Reading somebody else's transcript is not an administrative setting. A conversation
+    // holds whatever its user pasted in, which in a school is usually about a child, and
+    // `ai.settings.manage` — "may choose the vendor and the budget" — was the closest string
+    // that existed when the module was written. It is the wrong shape for this: the person
+    // who configures the AI is not automatically the person who may read what staff typed
+    // into it.
+    'ai.conversations.view.all',
+    // Choosing the vendor and setting the ceiling are different decisions, and separating
+    // them gives AI spending the same split accounting already has between
+    // `accounting.journal.create` and `accounting.journal.post`.
+    'ai.budgets.manage',
   ],
 } as const;
 

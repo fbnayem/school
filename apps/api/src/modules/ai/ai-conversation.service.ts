@@ -11,9 +11,10 @@
  *     it tried. A conversation is archived, never erased (ADR-008).
  *  3. **A user reads their own conversations.** `ai.copilot.use` is permission to *use* the
  *     copilot, not permission to read colleagues' transcripts — those contain whatever the
- *     user pasted in, which in a school is usually about a child. Only `ai.settings.manage`
- *     widens the scope, and the rule is applied to the query rather than to the route, so a
- *     caller outside their scope gets the same 404 a caller from another tenant gets.
+ *     user pasted in, which in a school is usually about a child. Only
+ *     `ai.conversations.view.all` widens the scope — held by no system role by default — and
+ *     the rule is applied to the query rather than to the route, so a caller outside their
+ *     scope gets the same 404 a caller from another tenant gets.
  *  4. **No network call happens inside a database transaction.** The provider round trip runs
  *     between two short transactions, so a slow model cannot hold a connection (or a row
  *     lock) open for thirty seconds. The DB work that follows it is one transaction: the user
@@ -193,13 +194,20 @@ export class AiConversationService {
   /**
    * The scope rule, in one place.
    *
-   * Without `ai.settings.manage` the caller sees their own conversations and nothing else,
-   * whatever `startedByUserId` they sent — the parameter is ignored rather than rejected,
-   * because a 403 on it would confirm that other people's conversations exist. With the
-   * permission, the parameter filters; without it, it cannot widen anything.
+   * Without `ai.conversations.view.all` the caller sees their own conversations and nothing
+   * else, whatever `startedByUserId` they sent — the parameter is ignored rather than
+   * rejected, because a 403 on it would confirm that other people's conversations exist. With
+   * the permission, the parameter filters; without it, it cannot widen anything.
+   *
+   * This used to key on `ai.settings.manage`, which was the closest string that existed. It
+   * was the wrong shape: that permission means "may choose the vendor and the routing", and
+   * configuring the AI should not carry reading what staff typed into it — a transcript holds
+   * whatever its user pasted in, which in a school is usually about a child. No system role
+   * holds `ai.conversations.view.all` by default; a school that wants someone to have it has
+   * to grant it deliberately.
    */
   private ownerFilter(principal: Principal, requestedOwner: string | undefined): SQL {
-    if (!can(principal, 'ai.settings.manage')) {
+    if (!can(principal, 'ai.conversations.view.all')) {
       return eq(aiConversations.startedByUserId, principal.userId);
     }
     return requestedOwner

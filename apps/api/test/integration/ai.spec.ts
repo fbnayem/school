@@ -1065,16 +1065,40 @@ describe('AI foundation — conversations, metering and budgets', () => {
       expect(borrowed.body.data).toHaveLength(0);
     });
 
-    it('lets ai.settings.manage read a conversation it did not start', async () => {
-      // The owner holds `*`, and therefore `ai.settings.manage` — the one permission that
-      // widens conversation visibility. There is no `ai.conversations.view.all` string in the
-      // catalogue; see the note in ai.controller.ts.
+    it('lets ai.conversations.view.all read a conversation it did not start', async () => {
+      // The owner holds `*`, and so holds the one permission that widens conversation
+      // visibility. No system role holds it on its own: reading a colleague's transcript is a
+      // decision a school has to make deliberately, not something that arrives with the
+      // ability to configure the AI.
       const response = await get('owner', `/api/v1/ai/conversations/${conversationId}`);
       expect(response.status, JSON.stringify(response.body)).toBe(200);
       expect(response.body.conversation.id).toBe(conversationId);
     });
 
-    it('shows a usage-viewer without ai.settings.manage only their own attribution', async () => {
+    it('does not let the principal read a colleague’s conversation', async () => {
+      // The principal holds ai.usage.view and ai.budgets.manage — they answer for what AI
+      // costs — and deliberately not ai.conversations.view.all. Seeing the bill is not seeing
+      // what staff typed. 404 rather than 403, so the conversation is not confirmed to exist.
+      const response = await get('principal', `/api/v1/ai/conversations/${conversationId}`);
+      expect(response.status).toBe(404);
+    });
+
+    it('lets the principal set a budget but not change the provider routing', async () => {
+      // The split that gives AI spending what accounting has between creating a journal entry
+      // and posting it: the person who picks the vendor is not the person who decides the
+      // ceiling.
+      const budget = await put('principal', '/api/v1/ai/budgets/2026-09', {
+        tokenLimit: 1_000_000,
+        costLimit: '500.0000',
+        hardStop: true,
+      });
+      expect(budget.status, JSON.stringify(budget.body)).toBe(200);
+
+      const settings = await get('principal', '/api/v1/ai/settings');
+      expect(settings.status).toBe(403);
+    });
+
+    it('shows a usage-viewer without ai.conversations.view.all only their own attribution', async () => {
       // Every seeded staff role that holds `ai.usage.view` here also holds `*`, so this
       // asserts the rule directly on the scoping function's observable effect: the owner sees
       // more than one user's attribution, which a self-scoped caller could not.

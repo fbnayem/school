@@ -9,18 +9,24 @@
  *
  *   ai.copilot.use      — use the assistant: create conversations, send messages, read your own
  *   ai.usage.view       — see what AI is costing this institution
- *   ai.settings.manage  — set budgets and routing, and read *anyone's* conversation
+ *   ai.settings.manage  — provider routing and institution AI settings: which vendor, which
+ *                         model per task, whether tutoring is on
+ *   ai.budgets.manage   — the spending ceiling. Separate from routing, because the person who
+ *                         chooses the model should not be the one who decides how much may be
+ *                         spent on it
+ *   ai.conversations.view.all — read somebody else's transcript. Granted to no system role by
+ *                         default: a conversation holds whatever its user pasted in, which in
+ *                         a school is usually about a child
  *
  * Two things worth stating because they are easy to get wrong:
  *
  *  1. **Reading someone else's conversation is not covered by `ai.copilot.use`.** A transcript
  *     contains whatever the user pasted into it, which in a school is usually about a child.
  *     `GET /ai/conversations/:id` therefore carries `ai.copilot.use` at the route and the
- *     service pins the row to the caller unless they also hold `ai.settings.manage` — failing
- *     closed on the data, and answering 404 rather than 403 so the existence of another
- *     person's conversation is not confirmed. There is no `ai.conversations.view.all` string
- *     in `packages/permissions/src/catalog.ts`; `ai.settings.manage` is the closest that
- *     exists, and the gap is reported rather than papered over.
+ *     service pins the row to the caller unless they also hold `ai.conversations.view.all` —
+ *     failing closed on the data, and answering 404 rather than 403 so the existence of
+ *     another person's conversation is not confirmed. No system role holds that permission by
+ *     default; a school that wants a named person to read staff transcripts has to grant it.
  *  2. **`GET /ai/providers` never returns a credential.** It reports, per adapter, whether the
  *     deployment has what it needs and the *names* of any variables that are missing. Not a
  *     value, not a prefix, not a masked form, not a length — a masked key still narrows a
@@ -92,7 +98,11 @@ export class AiController {
 
   /** The budget is replaced whole — a PUT, because that is what a PUT means. */
   @Put('budgets/:yearMonth')
-  @RequirePermissions('ai.settings.manage')
+  // Setting the ceiling is a budget decision, not a vendor one. It used to share
+  // `ai.settings.manage` with provider routing, which meant whoever chose the model also
+  // chose how much the school could spend on it — the separation accounting gets between
+  // creating a journal entry and posting it.
+  @RequirePermissions('ai.budgets.manage')
   @Audited({
     module: 'ai',
     resourceType: 'ai_budget',
@@ -209,7 +219,7 @@ export class AiController {
 
   @Get('conversations')
   @RequirePermissions('ai.copilot.use')
-  @ApiOperation({ summary: 'Your AI conversations (all of them, with ai.settings.manage)' })
+  @ApiOperation({ summary: 'Your AI conversations (everyone’s, with ai.conversations.view.all)' })
   async listConversations(
     @CurrentUser() principal: Principal,
     @Query(zodQuery(listAiConversationsSchema))
