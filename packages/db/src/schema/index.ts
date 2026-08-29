@@ -33,3 +33,6 @@ export * from './transport';
 export * from './inventory';
 export * from './assets';
 export * from './leave';
+export * from './documents';
+export * from './reports';
+export * from './automation';

@@ -52,6 +52,10 @@ import { LmsModule } from './modules/lms/lms.module';
 import { CommunicationModule } from './modules/communication/communication.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { AssetsModule } from './modules/assets/assets.module';
+import { LeaveModule } from './modules/leave/leave.module';
+import { DocumentsModule } from './modules/documents/documents.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { AutomationModule } from './modules/automation/automation.module';
 
 @Module({
   imports: [
@@ -108,6 +112,10 @@ import { AssetsModule } from './modules/assets/assets.module';
     CommunicationModule,
     InventoryModule,
     AssetsModule,
+    LeaveModule,
+    DocumentsModule,
+    ReportsModule,
+    AutomationModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: RateLimitGuard },
